@@ -12,6 +12,7 @@ BiocManager::install(c("clusterProfiler", "AnnotationHub"))
 library(DESeq2)
 library(dplyr)
 library(tidyverse)
+library(EnhancedVolcano)
 
 # set the working directory
 setwd("/mnt/sda1/RNA/40-815970407/Sheep")
@@ -86,7 +87,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("6.deseq2/",results[i],".0.05P.0.584LFC.updownDEGs_RELAXED.csv"), row.names = T)
+  write.csv(resSig , file=paste0("6.deseq2/",results[i],".0.1P.0LFC.updownDEGs_RELAXED.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
@@ -95,7 +96,35 @@ for(i in 1:length(results)){
 # fc = 1.4, log2fc = 0.5 (1.5 times higher expression)
 # log2fc =0 means no change
 
+# these next R scripts are for a variety of visualization, QC and other plots to
+# get a sense of what the RNAseq data looks like based on DESEq2 analysis
+#
+# 1) MA plot
+# 2) PCA plot
+# 3) Volcano plot
+#
+ 
+# 1. MA plot
+pdf("6.deseq2/MAplot.pdf")
+plotMA(res,main = "MA plot", alpha=0.1,colNonSig = "black", colSig = "red",colLine = "lightblue")
+dev.off()
 
+# 2. Volcano plot
+pdf("6.deseq2/EnhancedVolcano.pdf", width=10, height=9)
+EnhancedVolcano(res,
+	lab=rownames(res),
+	x='log2FoldChange',
+	y='padj',
+	title='Volcano plot',
+	pCutoff=0.1,
+	FCcutoff=0,
+	pointSize=3.0,
+	labSize=2,
+	legendPosition = 'right',
+    legendLabSize = 12,
+    drawConnectors = TRUE,
+    widthConnectors = 0.3)
+dev.off()
 
 # Extract the rawcounts for these significant genes (for WGCNA)
 #required_df <- countData[rownames(countData) %in% rownames(resSig1),]
