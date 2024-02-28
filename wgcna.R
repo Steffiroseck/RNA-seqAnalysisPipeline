@@ -93,16 +93,15 @@ allowWGCNAThreads()          # allow multi-threading (optional)
                               colData = sample_metadata,
                               design = ~ 1) # not spcifying model
 
-## remove all genes with counts < 4 in more than 75% of samples (22*0.75=16)
+## remove all genes with counts < 10 
 ## suggested by WGCNA on RNAseq FAQ
 
-  dds75 <- dds[rowSums(counts(dds) >= 4)]
-  nrow(dds75) 
+  dds75 <- dds[rowSums(counts(dds) >= 10)]
+  nrow(dds75) #20057
 
 
 # perform variance stabilization
   dds_norm <- vst(dds75)
-  dds_norm <- vst(dds)
   write.csv(assay(dds_norm),"7.wgcna/Lambs_allSamples_normalized_Counts",row.names=T)
 
 # get normalized counts
@@ -263,18 +262,7 @@ allowWGCNAThreads()          # allow multi-threading (optional)
   dev.off()
 
 #Each row corresponds to a module eigengene, and the columns correspond to a trait. 
-#Each cell contains a p-value and correlation. Those with strong positive correlations are shaded a darker red while those with stronger negative correlations become more blue.
-
-# Which modules have biggest differences across methane production or methane yield?
-# Create the design matrix from the `methane yield` variable  
-  des_mat <- model.matrix(~sample_metadata$CH4yield)
-# Run linear model on each module. Limma wants our tests to be per row, so we also need to transpose so the eigengenes are rows
-  fit <- limma::lmFit(t(mergedMEs), design = des_mat)
-# Apply empirical Bayes to smooth standard errors
-  fit <- limma::eBayes(fit)
-# Apply multiple testing correction and obtain stats  
-stats_df <- limma::topTable(fit, number = ncol(mergedMEs)) %>%
-  tibble::rownames_to_column("module")# It seems darkmagenta module has highest significance to methane yield. Lets dive into more details of this module.  
+#Each cell contains a p-value and correlation. Those with strong positive correlations are shaded a darker red while those with stronger negative correlations become more blue. 
   
 # heatmap with significance
   heatmap.data <- merge(mergedMEs , allTraits, by = 'row.names')
@@ -297,8 +285,6 @@ stats_df <- limma::topTable(fit, number = ncol(mergedMEs)) %>%
 # Define variable weight containing the weight column of datTrait
   metpro = as.data.frame(sample_metadata$CH4production);
   names(metpro) = "methane_production"
-  metyield = as.data.frame(sample_metadata$CH4yield)
-  names(metyield) = "methane_yield"
   modNames = substring(names(mergedMEs), 3) #extract module names
 
 #Calculate the module membership and the associated p-values
@@ -320,27 +306,17 @@ stats_df <- limma::topTable(fit, number = ncol(mergedMEs)) %>%
   head(25) #displays top 25 significant genes associated with methane production
   write.csv(GSPvalue.sig.metpro,"7.wgcna/Genes_with_high_significance_to_methaneproduction.csv", row.names=TRUE)
 
-#Calculate the gene significance and associated p-values for methane yield
-  geneTraitSignificance_y = as.data.frame(cor(norm.counts, metyield, use = "p"))
-  GSPvalue_y = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance_y), nSamples))
-  names(geneTraitSignificance_y) = paste("GS.", names(metyield), sep="")
-  names(GSPvalue_y) = paste("p.GS.", names(metyield), sep="")
-  head(GSPvalue_y)
-  GSPvalue.sig.metyield = subset(GSPvalue_y, p.GS.methane_yield<0.05)#450 genes that have a high significance for methane yield
-  GSPvalue_y %>%
-  as.data.frame() %>%
-  arrange(p.GS.methane_yield) %>%
-  head(25) #displays top 25 significant genes associated with methane production
-  write.csv(GSPvalue.sig.metyield,"7.wgcna/Genes_with_high_significance_to_methaneyield.csv", row.names=TRUE)
+# Using the gene significance you can identify genes that have a high significance for the interested trait.
+# Using the module membership measures you can identify genes with high module membership in interesting modules.
+# we have highest significance for methane production in yellowgreen and palevioletred3 modules
+# Plot a scatter plot of gene significance vs. module membership in thse modules.
 
-# we have highest significance for methane production in darkmagenta module
-# Plot a scatter plot of gene significance vs. module membership in the darkmagenta module.
 # calculate the module membership values (aka. module eigengene based connectivity kME):
   datKME = signedKME(norm.counts, mergedMEs)
-  pdf("7.wgcna/10.genesignificance_vs_modulemembership_yellowgreen_modules.pdf",width=14)
+  pdf("7.wgcna/10.genesignificance_vs_modulemembership_YG_PVR_modules.pdf",width=14)
   colorOfColumn = substring(names(datKME), 4)
   par(mfrow = c(2, 1))
-  selectModules = c("yellowgreen")
+  selectModules = c("yellowgreen", "palevioletred3")
   par(mfrow = c(1, 2))
   for (module in selectModules) {
     column = match(module, colorOfColumn)
@@ -348,38 +324,46 @@ stats_df <- limma::topTable(fit, number = ncol(mergedMEs)) %>%
     verboseScatterplot(datKME[restModule, column], abs(geneTraitSignificance[restModule,1]), xlab = paste("Module Membership ", 
         module, "module"), ylab = "GS.methane_production", main = paste("kME.", module, 
         "vs. GS"), col = module)
-    verboseScatterplot(datKME[restModule, column], abs(geneTraitSignificance_y[restModule,1]), xlab = paste("Module Membership ", 
-        module, "module"), ylab = "GS.methane_yield", main = paste("kME.", module, 
-        "vs. GS"), col = module)
   }
   dev.off()
 
+
 # This indicates that the genes that are highly significantly associated with the trait (high gene significance) are also the genes that are the most connected within their module (high module membership). 
-# Therefore genes in the darkmagenta module could be potential target genes when looking at methane production.
+# Therefore genes in the yellowgreen and palevioletred3 module could be potential target genes when looking at methane production.
 
 ##################################################################################################
 #Intramodular analysis: identifying genes with high GS and MM
 ##################################################################################################
+
 #identifying genes with high GS and MM for significant module (GS > 0.2 & MM > 0.8)
-# 1. methane production trait
+# 1. methane production trait in yellowgreen
   intra_modular_analysis=data.frame(abs(geneModuleMembership[moduleGenes, column]),abs(geneTraitSignificance[moduleGenes, 1]))
   rownames(intra_modular_analysis) = colnames(norm.counts)[ModuleColors=="yellowgreen"] #only the yellowgreen module
   head(intra_modular_analysis)
   colnames(intra_modular_analysis)<- c("abs.geneModuleMembership.moduleGenes", "abs.geneTraitSignificance.moduleGenes")
   intra_modular_analysis.hubgene = subset(intra_modular_analysis, abs.geneModuleMembership.moduleGenes>0.8 & abs.geneTraitSignificance.moduleGenes > 0.2)
-  write.csv(intra_modular_analysis.hubgene, file = "7.wgcna/hubgenes_in_yellowgreen_methaneproduction.csv")
+  write.csv(intra_modular_analysis.hubgene, file = "7.wgcna/GS_MM_in_yellowgreen_methaneproduction.csv")
 
-# 1. methane yield trait
-  intra_modular_analysis_y=data.frame(abs(geneModuleMembership[moduleGenes, column]),abs(geneTraitSignificance_y[moduleGenes, 1]))
-  rownames(intra_modular_analysis_y) = colnames(norm.counts)[ModuleColors=="palevioletred3"] #only the palevioletred3 module
-  head(intra_modular_analysis_y)
-  colnames(intra_modular_analysis_y)<- c("abs.geneModuleMembership.moduleGenes", "abs.geneTraitSignificance.moduleGenes")
-  intra_modular_analysis.hubgene_y = subset(intra_modular_analysis_y, abs.geneModuleMembership.moduleGenes>0.8 & abs.geneTraitSignificance.moduleGenes > 0.2)
-  write.csv(intra_modular_analysis.hubgene_y, file = "7.wgcna/hubgenes_in_palevioletred3_methaneyield.csv")
+YG_module<-as.data.frame(dimnames(data.frame(norm.counts))[[2]][moduleGenes])
+names(YG_module)="genename" 
+MM<-abs(geneModuleMembership[moduleGenes,column])
+GS<-abs(geneTraitSignificance[moduleGenes, 1])
+c<-as.data.frame(cbind(MM,GS)) 
+rownames(c)=YG_module$genename 
+YG_hub <-abs(c$MM)>0.8&abs(c$GS)>0.2 
+write.csv(YG_hub, file = "7.wgcna/Hubgene_GS_MM_in_yellowgreen_methaneproduction.csv")
+
+# Palevioletred3
+  intra_modular_analysis=data.frame(abs(geneModuleMembership[moduleGenes, column]),abs(geneTraitSignificance[moduleGenes, 1]))
+  rownames(intra_modular_analysis) = colnames(norm.counts)[ModuleColors=="palevioletred3"] #only the palevioletred3 module
+  head(intra_modular_analysis)
+  colnames(intra_modular_analysis)<- c("abs.geneModuleMembership.moduleGenes", "abs.geneTraitSignificance.moduleGenes")
+  intra_modular_analysis.hubgene = subset(intra_modular_analysis, abs.geneModuleMembership.moduleGenes>0.8 & abs.geneTraitSignificance.moduleGenes > 0.2)
+  write.csv(intra_modular_analysis.hubgene, file = "7.wgcna/GS_MM_in_palevioletred3_methaneproduction.csv")
 
 #high intramodular connectivity ~ high kwithin => hub genes (kwithin: connectivity of the each driver gene in the darkmagenta module to all other genes in the darkmagenta)
   connectivity = intramodularConnectivity(adjacency, ModuleColors)
-  connectivity = connectivity[colnames(norm.counts)[ModuleColors=="yellowgreen"],] #only the darkmagenta module
+  connectivity = connectivity[colnames(norm.counts)[ModuleColors=="yellowgreen"],] #only the yellowgreen module
   order.kWithin = order(connectivity$kWithin, decreasing = TRUE)
   connectivity = connectivity[order.kWithin,] #order rows following kWithin
   #connectivity = connectivity[1:5,] #top 5 genes that have a high connectivity to other genes in the yellowgreen module
@@ -454,27 +438,6 @@ stats_df <- limma::topTable(fit, number = ncol(mergedMEs)) %>%
   plotEigengeneNetworks(MET, "Eigengene adjacency heatmap", marHeatmap = c(5,5,2,2),
   plotDendrograms = FALSE, xLabelsAngle = 90)
   dev.off()
-
-###################### option 2 for module identification
-cor <- WGCNA::cor
-net = blockwiseModules(norm.counts, power = power,
-                       TOMType = "signed", minModuleSize = 30,
-                       reassignThreshold = 0, mergeCutHeight = 0.25,
-                       numericLabels = TRUE, pamRespectsDendro = FALSE,
-                       saveTOMs = FALSE,
-                       verbose = 3)
-cor<- stats::cor
-# unsigned -> nodes with positive & negative correlation are treated equally 
-# signed -> nodes with negative correlation are considered *unconnected*, treated as zero
-
-sizeGrWindow(12, 9)
-mergedColors = labels2colors(net$colors)
-pdf(file = "7.wgcna/option2-module_tree_blockwise.pdf", width = 8, height = 6);
-plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
-                    "Module colors",
-                    dendroLabels = FALSE, hang = 0.03,
-                    addGuide = TRUE, guideHang = 0.05)
-dev.off()
 
 #########################################################################################################################################
 # Last step is to export and save the network. Then you can import it in a software for network visualization as Cytoscape, for example.
