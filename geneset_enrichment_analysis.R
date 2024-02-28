@@ -106,7 +106,7 @@ barplot(ans.go, showCategory=20)
 dev.off()
 
 pdf("8.geneset.enrichments/upsetplot_kegg.pdf")
-upsetplot(ans.kegg, showCategory=30)
+upsetplot(ans.kegg, showCategory=18)
 dev.off()
 
 pdf("8.geneset.enrichments/emapplot_kegg.pdf", width=12)
