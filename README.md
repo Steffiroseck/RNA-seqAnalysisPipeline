@@ -6,7 +6,7 @@ Make sure you have installed the necessary softwares required to run the pipelin
 
 **1. FastQC:** To generate quality reports for the raw fastq files coming from the sequencing platforms.
   ```
-    conda install bioconda::fastqc
+  conda install bioconda::fastqc
   ```
    or
    ```
