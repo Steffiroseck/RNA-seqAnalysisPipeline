@@ -66,7 +66,7 @@ res_allgenes_with_entrez = merge(as.data.frame(res_allgenes), res_allgenesEntrez
 res_sigGenesEntrez$ENTREZID <- ifelse(is.na(res_sigGenesEntrez$ENTREZID), res_sigGenesEntrez$SYMBOL, res_sigGenesEntrez$ENTREZID)
 colnames(res_sigGenesEntrez) = c("GeneID", "ENTREZID")
 res_degs_with_entrez = merge(as.data.frame(res_degs), res_sigGenesEntrez, by = "GeneID") #All entrezIDs have been retrieved for the DEGs (except for 2 genes)
-write.csv(res_degs_with_entrez,"6.deseq2/CH4production_DEGs_mapped_to_Entrezids.csv")
+# write.csv(res_degs_with_entrez,"6.deseq2/CH4production_DEGs_mapped_to_Entrezids.csv")
 
 #####################################################
 # GO AND KEGG ENRICHMENTS
