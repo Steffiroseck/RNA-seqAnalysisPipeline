@@ -1,3 +1,16 @@
+# This R script does a differential expression analysis on the two important modules with highest correlations to methane production.
+# yellow green and palevioletred3 modules
+
+library(stringr)
+library(clusterProfiler)
+library(pathview)
+library(stringr)
+library(AnnotationHub)
+library(ggridges)
+library(enrichplot)
+
+# system("mkdir 7.wgcna/deseq2.YG.PVR")
+
 # extract genes from the inetersting modules
 yg_pvr = geneInfo %>% filter(moduleColor %in% "yellowgreen" | moduleColor %in% "palevioletred3")
 yellowgreen = geneInfo %>% filter(moduleColor %in% "yellowgreen")
@@ -42,7 +55,7 @@ deseq2Data <- DESeq(deseq2Data)
 # STRINGENT - with reads removed in steps 32 to 34
 # RELAXED - with reads not removed
 
-pval = 0.1
+pval = 0.05
 lfc = 0
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
@@ -56,13 +69,13 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("7.wgcna/",results[i],".0.1P.0LFC.updownDEGs_STRINGENT.csv"), row.names = T)
+  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.STRINGENT.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
 
-pval = 0.1
-lfc = 0.584
+pval = 0.05
+lfc = 0
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
 downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
@@ -75,13 +88,20 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("7.wgcna/",results[i],".0.1P.0.584LFC.updownDEGs_RELAXED.csv"), row.names = T)
+  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs_RELAXED.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
 
 # Enrichment Analysis of the genes
-# Taking the resSig variable from the above deseq2 (one with p<0.1 and lfc=0 stringent approach)
+# extract annotation DB of sheep
+
+ah <- AnnotationHub()
+AnnotationHub::query(ah, c("Ovis", "aries"))
+Oaries <- ah[["AH111978"]]
+columns(Oaries)
+
+# Taking the resSig variable from the above deseq2 (one with p<0.05 and lfc=0 relaxed approach)
 resSig$GeneID = rownames(resSig)
 YgPvrEntrez <- AnnotationDbi::select(Oaries, keys =  rownames(resSig),
   columns = c('ENTREZID','GENENAME'), keytype = 'SYMBOL') # Oaries is the annotation db created from the geneset_enrichment_analysis.R code
@@ -185,4 +205,7 @@ x <- pathview(gene.data  = geneList,
               pathway.id = pathwayids,
               species    = keggspecies,
               gene.idtype = "KEGG",
-              limit      = list(gene=max(abs(geneList)), cpd=1))
+              limit      = list(gene=max(abs(geneList)), cpd=1),
+             kegg.dir="8.geneset.enrichments/wgcna_YG_PVR_pathview")
+
+# The .pathview images will be generated in the current directory, whereas .xml and original kegg images will be in the 8.geneset.enrichments/wgcna_YG_PVR_pathview folder.
