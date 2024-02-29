@@ -1,4 +1,4 @@
-# OarRNASeq
+# RNASequencingAnalysisPipeline
 RNA-Seq analysis pipeline for sheep (Ovis aries) samples. The RNA-Sequencing on 24 samples were performed on Illumina Platform and reads were generated in fastq format. Once the fastq data is downloaded, then the below pipeline have been used for generating the biological information.
 
 # Pre-requisites
