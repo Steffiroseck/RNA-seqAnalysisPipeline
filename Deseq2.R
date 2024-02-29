@@ -113,22 +113,20 @@ plotMA(res,main = "MA plot", alpha=0.1,colNonSig = "black", colSig = "red",colLi
 dev.off()
 
 # 2. Volcano plot
-# change the pvalue and fccutoffs as you wish (lines 123 and 124)
-pdf("6.deseq2/EnhancedVolcano_scaled.pdf", width=10, height=9)
+# change the pvalue and fccutoffs as you wish (lines 124 and 125)
+pdf("6.deseq2/relaxed/EnhancedVolcano_scaled.pdf", width=14, height=9)
 EnhancedVolcano(res,
 	lab=rownames(res),
 	x='log2FoldChange',
 	y='padj',
 	title='Volcano plot',
+	caption = 'FC cutoff, 0.584; p-value cutoff, 0.05',
 	pCutoff=0.05,
 	FCcutoff=0.584,
-	pointSize=3.0,
-	labSize=2,
-	legendPosition = 'right',
-    legendLabSize = 12,
-    drawConnectors = TRUE,
-    widthConnectors = 0.3)
+	pointSize = 3.0)
 dev.off()
+
+##labSize=2,legendPosition = 'top',legendLabSize = 12 for volcanoplot if need to add gene names
 
 # Extract the rawcounts for these significant genes (for WGCNA)
 #required_df <- countData[rownames(countData) %in% rownames(resSig1),]
