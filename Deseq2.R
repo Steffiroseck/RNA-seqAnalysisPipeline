@@ -108,13 +108,13 @@ for(i in 1:length(results)){
 #
  
 # 1. MA plot
-pdf("6.deseq2/MAplot_scaled.pdf")
+pdf("6.deseq2/MAplot.pdf")
 plotMA(res,main = "MA plot", alpha=0.1,colNonSig = "black", colSig = "red",colLine = "lightblue")
 dev.off()
 
 # 2. Volcano plot
 # change the pvalue and fccutoffs as you wish (lines 124 and 125)
-pdf("6.deseq2/relaxed/EnhancedVolcano_scaled.pdf", width=14, height=9)
+pdf("6.deseq2/EnhancedVolcano.pdf", width=14, height=9)
 EnhancedVolcano(res,
 	lab=rownames(res),
 	x='log2FoldChange',
