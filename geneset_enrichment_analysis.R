@@ -101,20 +101,20 @@ write.csv(tab.kegg,"8.geneset.enrichments/KEGG_enrichments.csv")
 # VISUALIZATIONS OF GO AND KEGG ENRICHMENTS
 #####################################################
 
-pdf("8.geneset.enrichments/relaxed.nonscaled/GO-Barplot.pdf", height=14)
+pdf("8.geneset.enrichments/GO-Barplot.pdf", height=14)
 barplot(ans.go, showCategory=20)
 dev.off()
 
-pdf("8.geneset.enrichments/relaxed.nonscaled/upsetplot_kegg.pdf")
+pdf("8.geneset.enrichments/upsetplot_kegg.pdf")
 upsetplot(ans.kegg, showCategory=18)
 dev.off()
 
-pdf("8.geneset.enrichments/relaxed.nonscaled/emapplot_kegg.pdf", width=12)
+pdf("8.geneset.enrichments/emapplot_kegg.pdf", width=12)
 emapplot(pairwise_termsim(ans.kegg))
 dev.off()
 
 # In order to consider the potentially biological complexities in which a gene may belong to multiple annotation categories,  cnetplot function will extract the complex association between genes and pathways.
-pdf("8.geneset.enrichments/relaxed.nonscaled/cnetplot_kegg.pdf", width=12)
+pdf("8.geneset.enrichments/cnetplot_kegg.pdf", width=12)
 cnetplot(ans.kegg, categorySize="pvalue", foldChange=res_sigGenes)
 dev.off()
 
