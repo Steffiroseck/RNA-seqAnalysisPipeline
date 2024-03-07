@@ -41,22 +41,14 @@ all(colnames(yg_pvr_Raw) == rownames(metaData))
 
 deseq2Data <- DESeqDataSetFromMatrix(countData=yg_pvr_Raw, colData=metaData, design= ~CH4production)
 
-# Stringent approach where we keep only rows that have at least 10 reads total
-keep <- rowSums(counts(deseq2Data)) >= 10
-deseq2Data <- deseq2Data[keep,] #240 remaining
-
 deseq2Data <- DESeq(deseq2Data)
-
 
 #loop through results and extract significant DEGs for each model term
 # speify the cut-offs for pval and lfc in the below variables.
 # make sure to change the filenames with the cutoff values before saving the deg file (Line 60)
 
-# STRINGENT - with reads removed in steps 32 to 34
-# RELAXED - with reads not removed
-
-pval = 0.05
-lfc = 0
+pval = 0.1
+lfc = 0.584
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
 downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
@@ -69,31 +61,15 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.STRINGENT.csv"), row.names = T)
+  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
 
-pval = 0.05
-lfc = 0
-results = resultsNames(deseq2Data)
-upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
-downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
-
-for(i in 1:length(results)){
-
-  res = results(deseq2Data, 
-                name = results[i])
-  resorder <- res[order(res$padj),]
-  upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
-  downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
-  resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs_RELAXED.csv"), row.names = T)
-  upresultstable[results[i],"upDEGs"] = upDEGs
-  downresultstable[results[i],"downDEGs"] = downDEGs 
-}
-
+########################################
 # Enrichment Analysis of the genes
+########################################
+
 # extract annotation DB of sheep
 
 ah <- AnnotationHub()
