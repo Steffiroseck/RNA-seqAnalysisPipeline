@@ -10,8 +10,10 @@ library(AnnotationHub)
 library(ggridges)
 library(enrichplot)
 
-# extract annotation DB of sheep
+# set the working directory
+setwd("/mnt/sda1/RNA/40-815970407/Sheep")
 
+# extract annotation DB of sheep
 ah <- AnnotationHub()
 AnnotationHub::query(ah, c("Ovis", "aries"))
 Oaries <- ah[["AH111978"]]
