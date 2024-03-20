@@ -47,7 +47,7 @@ Make sure you have installed the necessary softwares required to run the pipelin
   The installation instructions can be found at : https://subread.sourceforge.net/featureCounts.html
 
 After you have installed the necessary software, please proceed to running the actual pipeline. We would run them in the following order:
-1. bash V1.0.RNASeqPipeline.sh or /.V1.0.RNASeqPipeline.sh
+1. bash V1.0.RNASeqPipeline.sh or ./V1.0.RNASeqPipeline.sh
 2. Rscript V1.0_Deseq2.R
 3. Rscript V1.0_GO_KEGG_enrichment_analysis.R
 4. Rscript V1.0_wgcna.R
