@@ -19,7 +19,7 @@ setwd("/mnt/sda1/RNA/40-815970407/Sheep")
 
 # create a directory to store DESeq2 outputs. Since I am pre-filtering reads in coming steps, 
 # I am creating directories to keep stringent results (where pre-filtering is done), and relaxed ( where no pre-filtering applied).
-#system("mkdir 6.deseq2")
+system("mkdir 6.deseq2")
 #system("mkdir 6.deseq2/stringent")
 #system("mkdir 6.deseq2/relaxed")
 
@@ -90,7 +90,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("6.deseq2/relaxed/",results[i],".0.05P.0LFC.updownDEGs_RELAXED.csv"), row.names = T)
+  write.csv(resSig , file=paste0("6.deseq2/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
