@@ -36,6 +36,7 @@ for file in 24_Samples/*R1_001.fastq.gz; do
 done
 echo "FastQC finished succesfully!"
 
+
 # Step 2: Adapter trimming
 # Run Trimmomatic
 
