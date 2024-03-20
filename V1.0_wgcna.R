@@ -14,6 +14,9 @@ library(CorLevelPlot)
 options(stringsAsFactors = FALSE);
 allowWGCNAThreads()          # allow multi-threading (optional)
 
+# set the working directory
+setwd("/mnt/sda1/RNA/40-815970407/Sheep")
+
 ##################################################################################################
 # Read the gene counts table and metadata
 ##################################################################################################
