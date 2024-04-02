@@ -11,7 +11,7 @@ SECONDS=0
 # StringTie 2.2.1
 
 # Path to the working directory where fastq files are present. In this example, the samples are present in a sub-directory of sheep named 24_samples. Hence, the current working directory is set.
-workdir = "/mnt/sda1/00_fastq/Sheep/"
+workdir="/mnt/sda1/00_fastq/Sheep/"
 cd $workdir
 
 # Create directories to store outputs and give full permission to those folders for the output files to be saved.
