@@ -16,7 +16,7 @@ cd $workdir
 
 # Create directories to store outputs and give full permission to those folders for the output files to be saved.
 echo "Creating directories to store outputs!"
-mkdir 1.fatsqc
+mkdir 1.fastqc
 mkdir 2.trimmomatic
 mkdir 3.fastqc.after.trimmomatic
 mkdir 4.hisat2
