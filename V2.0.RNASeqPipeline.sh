@@ -62,7 +62,7 @@ echo "FastQC on trimmed reads finished succesfully!"
 # 4.1: Build reference genome index. The genome should be in unzipped format or else it wont work
 
 echo "Starting to build the genome index files"
-refgenome="Reference_geneome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna"
+refgenome="Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna"
 hisat2-build  $refgenome $refgenome
 
 # 4.2 Now Align to the reference genome
@@ -72,7 +72,7 @@ for R1 in 2.trimmomatic/*_R1_paired.fastq.gz; do
     R2=$(echo $R1| sed 's/_R1_/_R2_/'); 
     sample=$(echo $R1|sed 's/_R1_paired.fastq.gz//'|sed 's/2.trimmomatic\///'); 
     hisat2 -q --time --novel-splicesite-outfile 4.hisat2/$sample.tsv --summary-file 4.hisat2/$sample.summary.txt \
-    --met-file 4.hisat2/$sample.met.txt --threads $threads -x Reference_geneome/ARS-UI_Ramb_v3.0/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
+    --met-file 4.hisat2/$sample.met.txt --threads $threads -x Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
     -1 $R1 -2 $R2 | tee >(samtools flagstat - > 4.hisat2/$sample.flagstat) \
     | samtools sort -O BAM | tee 4.hisat2/$sample.bam \
     | samtools index - 4.hisat2/$sample.bam.bai &> 4.hisat2/$sample.hisat2Log.txt;
@@ -84,7 +84,7 @@ echo "Alignment finished succesfully!"
 # When you want to analyze the data for differential gene expression analysis, it would be convenient to have counts for all samples in a single file (gene count matrix).
 
 echo "Generating the read counts matrix.."
-gtffile="/mnt/sda1/RNA/40-815970407/Sheep/Reference_geneome/ARS-UI_Ramb_v3.0/genomic.gtf"
+gtffile="/mnt/sda1/RNA/40-815970407/Sheep/Reference_genome/genomic.gtf"
 
 featureCounts -T 8 -t 'gene' -g 'gene_id' -f -a $gtffile -o 5.featurecounts/Lambs.featurecounts.hisat2 4.hisat2/*.bam
 
