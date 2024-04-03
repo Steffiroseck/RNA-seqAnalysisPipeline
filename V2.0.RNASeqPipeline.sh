@@ -96,6 +96,12 @@ featureCounts -T 8 -t 'gene' -g 'gene_id' -f -a $gtffile -o 5.featurecounts/Lamb
 cut -f1,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32 5.featurecounts/Lambs.featurecounts.hisat2 > 5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix
 echo "Read count matrix generated!"
 echo "Have a look at the counts matrix. You may change the column names if needed.."
+echo "To ready this text file (count matrix) for the next step of differential gene expression analysis, you will need to clean it up further by removing the first header line, and modifying the column names (headers) to simpler, smaller sampleIDs.
+echo "An example of tidying the file is as shown below:
+## vim 4.featurecounts.ARS.5/LambAllSamples.featureCounts.Rmatrix.txt
+##dd
+##gg
+##:%s/4.hisat2\///g
 
 # After these step, try to remove extra texts in the column names (eg..bam in the sample names)
 
