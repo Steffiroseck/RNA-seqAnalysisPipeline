@@ -64,15 +64,17 @@ echo "FastQC on trimmed reads finished succesfully!"
 echo "Starting to build the genome index files"
 refgenome="Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna"
 hisat2-build  $refgenome $refgenome
+chmod a+x /mnt/sda1/00_fastq/Sheep/Reference_genome/*.ht2
 
 # 4.2 Now Align to the reference genome
 
 echo "Index files generated. Now performing the alignment. This might take a while.."
+threads=8
 for R1 in 2.trimmomatic/*_R1_paired.fastq.gz; do
     R2=$(echo $R1| sed 's/_R1_/_R2_/'); 
     sample=$(echo $R1|sed 's/_R1_paired.fastq.gz//'|sed 's/2.trimmomatic\///'); 
-    hisat2 -q --time --novel-splicesite-outfile 4.hisat2/$sample.tsv --summary-file 4.hisat2/$sample.summary.txt \
-    --met-file 4.hisat2/$sample.met.txt --threads $threads -x Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
+    echo hisat2 -q --summary-file 4.hisat2/$sample.summary.txt \
+    --threads $threads -x /mnt/sda1/00_fastq/Sheep/Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
     -1 $R1 -2 $R2 | tee >(samtools flagstat - > 4.hisat2/$sample.flagstat) \
     | samtools sort -O BAM | tee 4.hisat2/$sample.bam \
     | samtools index - 4.hisat2/$sample.bam.bai &> 4.hisat2/$sample.hisat2Log.txt;
