@@ -2,7 +2,8 @@
 # So make sure you have both files in the correct directories. In this scenario, I have copied the metadata to the main working directory (/mnt/sda1/RNA/40-815970407/Sheep)
 
 # Load all the necessary libraries. If not installed, install using either:
-install.packages("package") or
+install.packages("package") 
+# or
 # to install biconductor packages, 
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
