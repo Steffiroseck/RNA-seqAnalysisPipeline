@@ -1,3 +1,9 @@
+# set the working directory
+setwd("/mnt/sda1/00_fastq/Sheep")
+
+# create a directory to store the results for wgcna analysis
+system("mkdir 7.wgcna")
+
 # Load the libraries
 
 library(WGCNA)
@@ -13,9 +19,6 @@ library(CorLevelPlot)
 # The following setting is important, do not omit.
 options(stringsAsFactors = FALSE);
 allowWGCNAThreads()          # allow multi-threading (optional)
-
-# set the working directory
-setwd("/mnt/sda1/RNA/40-815970407/Sheep")
 
 ##################################################################################################
 # Read the gene counts table and metadata
