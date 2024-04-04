@@ -86,7 +86,7 @@ echo "Alignment finished succesfully!"
 # When you want to analyze the data for differential gene expression analysis, it would be convenient to have counts for all samples in a single file (gene count matrix).
 
 echo "Generating the read counts matrix.."
-gtffile="/mnt/sda1/RNA/40-815970407/Sheep/Reference_genome/genomic.gtf"
+gtffile="/mnt/sda1/00_fastq/Sheep/Reference_genome/genomic.gtf"
 
 featureCounts -T 8 -t 'gene' -g 'gene_id' -f -a $gtffile -o 5.featurecounts/Lambs.featurecounts.hisat2 4.hisat2/*.bam
 
