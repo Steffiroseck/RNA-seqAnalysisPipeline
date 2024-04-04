@@ -5,10 +5,10 @@
 install.packages("package") 
 # or
 # to install biconductor packages, 
-if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-BiocManager::install(version = "3.18")
-BiocManager::install(c("clusterProfiler", "AnnotationHub"))
+#if (!require("BiocManager", quietly = TRUE))
+#  install.packages("BiocManager")
+#BiocManager::install(version = "3.18")
+#BiocManager::install(c("clusterProfiler", "AnnotationHub"))
 
 library(DESeq2)
 library(dplyr)
