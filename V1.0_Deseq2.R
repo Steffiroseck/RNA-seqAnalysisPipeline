@@ -15,7 +15,7 @@ library(tidyverse)
 library(EnhancedVolcano)
 
 # set the working directory
-setwd("/mnt/sda1/RNA/40-815970407/Sheep")
+setwd("/mnt/sda1/00_fastq/Sheep/")
 
 # create a directory to store DESeq2 outputs. Since I am pre-filtering reads in coming steps, 
 # I am creating directories to keep stringent results (where pre-filtering is done), and relaxed ( where no pre-filtering applied).
@@ -29,6 +29,7 @@ countData<-read.csv("5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix",sep="\t
 countData<-countData[ , !names(countData) %in% c("7085","7073")]# Remove 7085 and 7073 as they had poor mapping rates
 
 # Remove the .bam, control, low, medium and high from the column names
+colnames(countData)<-gsub(".bam","",colnames(countData))
 colnames(countData)<-gsub("Control","",colnames(countData))
 colnames(countData)<-gsub("Low","",colnames(countData))
 colnames(countData)<-gsub("Medium","",colnames(countData))
@@ -76,8 +77,8 @@ deseq2Data <- DESeq(deseq2Data)
 # specify the cut-offs for pval and lfc in the below variables.
 # make sure to change the filenames with the cutoff values before saving the deg file (Line 91)
 
-pval = 0.05
-lfc = 0.584
+pval = 0.1
+lfc = 0
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
 downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
@@ -90,7 +91,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("6.deseq2/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
+  write.csv(resSig , file=paste0("6.deseq2/",results[i],".0.1P.0.584LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
@@ -120,10 +121,11 @@ EnhancedVolcano(res,
 	x='log2FoldChange',
 	y='padj',
 	title='Volcano plot',
-	caption = 'FC cutoff, 0.584; p-value cutoff, 0.05',
-	pCutoff=0.05,
-	FCcutoff=0.584,
-	pointSize = 3.0)
+	caption = 'FC cutoff, 0; p-value cutoff, 0.1',
+	pCutoff=0.1,
+	FCcutoff=0,
+	pointSize = 3.0,
+	labSize=2,legendPosition = 'top',legendLabSize = 12)
 dev.off()
 
 ##labSize=2,legendPosition = 'top',legendLabSize = 12 for volcanoplot if need to add gene names
