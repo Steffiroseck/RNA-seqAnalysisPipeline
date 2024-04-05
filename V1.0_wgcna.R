@@ -26,6 +26,7 @@ allowWGCNAThreads()          # allow multi-threading (optional)
 
   data=read.csv("5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix",header=T,row.names=1,sep="\t", check.names = FALSE)
   data=data[ , !names(data) %in% c("7085","7073")]
+  colnames(data)<-gsub(".bam","",colnames(data))
   colnames(data)<-gsub("Control","",colnames(data))
   colnames(data)<-gsub("Low","",colnames(data))
   colnames(data)<-gsub("Medium","",colnames(data))
@@ -99,13 +100,15 @@ allowWGCNAThreads()          # allow multi-threading (optional)
                               colData = sample_metadata,
                               design = ~ 1) # not spcifying model
 
-## remove all genes with counts < 10 
+## remove all genes with counts < 10 in more than 75% samples (22*0.75 = 16.5) 
 ## suggested by WGCNA on RNAseq FAQ
 
-  dds75 <- dds[rowSums(counts(dds) >= 10)]
-  nrow(dds75) #20057
+  #dds75 <- dds[rowSums(counts(dds) >= 10)]
+  #nrow(dds75) #20057
 
-
+  dds75 <- dds[ rowSums(counts(dds) >= 10) >= 16.5, ]
+  nrow(dds75) #16417
+  
 # perform variance stabilization
   dds_norm <- vst(dds75)
   write.csv(assay(dds_norm),"7.wgcna/Lambs_allSamples_normalized_Counts",row.names=T)
@@ -117,15 +120,11 @@ allowWGCNAThreads()          # allow multi-threading (optional)
 ########################################################################################
 # Network Construction 
 ########################################################################################
-
-# Choose a set of soft-thresholding powers
-  power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
-
 # Call the network topology analysis function
   sft <- pickSoftThreshold(norm.counts,
-                  powerVector = power,
-                  networkType = "signed",
-                  verbose = 5)
+                   dataIsExpr = TRUE,,
+                  networkType = "signed", 
+                  corFnc = cor)
 
   power=sft$powerEstimate #14
 
@@ -286,8 +285,8 @@ allowWGCNAThreads()          # allow multi-threading (optional)
   column_to_rownames(var = 'Row.names')
   pdf("7.wgcna/9.Module-trait_relationships_with_significance.pdf", width=14, height=10)
   CorLevelPlot(heatmap.data,
-             x = names(heatmap.data)[42:60],
-             y = names(heatmap.data)[1:41],
+             x = names(heatmap.data)[21:36],
+             y = names(heatmap.data)[1:20],
              col = c("blue1", "skyblue", "white", "pink", "red"),
              rotLabX = 30, rotLabY = 30)
   dev.off()
@@ -301,8 +300,6 @@ allowWGCNAThreads()          # allow multi-threading (optional)
   metpro = as.data.frame(sample_metadata$CH4production);
   names(metpro) = "methane_production"
   modNames = substring(names(mergedMEs), 3) #extract module names
-
-  MET = orderMEs(cbind(MEs, metpro))
 
 #Calculate the module membership and the associated p-values
   geneModuleMembership = as.data.frame(cor(norm.counts, MEs, use = "p"));
@@ -327,14 +324,14 @@ allowWGCNAThreads()          # allow multi-threading (optional)
 # we have highest significance for methane production in yellowgreen and palevioletred3 modules
 # Plot a scatter plot of gene significance vs. module membership in thse modules.
 
-  pdf("7.wgcna/10.genesignificance_vs_modulemembership_YG_PVR_modules.pdf",width=14)
-  column = match(module, modNames);
+  pdf("7.wgcna/10.genesignificance_vs_modulemembership_lightsteelblue_modules.pdf",width=14)
+  selectModules = c("paleturquoise")  
+  column = match(Module, modNames);
   par(mfrow = c(2, 1))
-  selectModules = c("yellowgreen", "palevioletred3")
   par(mfrow = c(1, 2))
   for (module in selectModules) {
     column = match(module, modNames);
-    moduleGenes = moduleColors==module;
+    moduleGenes = ModuleColors==module;
     verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]),
                    abs(geneTraitSignificance[moduleGenes, 1]),
                    xlab = paste("Module Membership in", module, "module"),
@@ -439,81 +436,3 @@ allowWGCNAThreads()          # allow multi-threading (optional)
   plotEigengeneNetworks(MET, "Eigengene adjacency heatmap", marHeatmap = c(5,5,2,2),
   plotDendrograms = FALSE, xLabelsAngle = 90)
   dev.off()
-
-#########################################################################################################################################
-# Last step is to export and save the network. Then you can import it in a software for network visualization as Cytoscape, for example.
-#########################################################################################################################################
-
-# Exporting the network to a cytoscape format
-# Export the gene list of old modules 
-  for (i in 1:length(merge$oldMEs)){
-    modules = c(substring(names(merge$oldMEs)[i], 3));
-    genes = colnames(norm.counts)
-    inModule = is.finite(match(ModuleColors,modules))
-    modGenes = genes[inModule]
-    modTOM=TOM[inModule,inModule]
-    dimnames(modTOM)=list(modGenes,modGenes)
-    cyt = exportNetworkToCytoscape(modTOM,
-                                 edgeFile = paste("7.wgcna/orign_CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
-                                 nodeFile = paste("7.wgcna/orign_CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
-                                 weighted = TRUE, threshold = -1, nodeNames = modGenes, nodeAttr = ModuleColors[inModule]);
-  }
-
-# Export the gene list of new modules 
-  for (i in 1:length(merge$newMEs)){
-    modules = c(substring(names(merge$newMEs)[i], 3));
-    genes = colnames(norm.counts)
-    inModule = is.finite(match(ModuleColors,modules))
-    modGenes = genes[inModule]
-    modTOM=TOM[inModule,inModule]
-    dimnames(modTOM)=list(modGenes,modGenes)
-    cyt = exportNetworkToCytoscape(modTOM,
-                                 edgeFile = paste("7.wgcna/merge_CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
-                                 nodeFile = paste("7.wgcna/merge_CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
-                                 weighted = TRUE, threshold = -1, nodeNames = modGenes, nodeAttr = ModuleColors[inModule]);
-  }
-
-#####################################################################################################################################
-#   Cytoscape
-#####################################################################################################################################
-
-#if(!"RCy3" %in% installed.packages()){
-#  install.packages("BiocManager")
-#  BiocManager::install("RCy3")
-#}
-
-# https://cytoscape.org/cytoscape-automation/for-scripters/R/notebooks/
-  library(RCy3)
-
-  cytoscapePing () # make sure cytoscape is open
-  cytoscapeVersionInfo ()
-
-###### for yellowgreen module of the merged data (newMEs) #################################
-  edge <- read.delim("7.wgcna/merge_CytoscapeInput-edges-darkmagenta.txt")
-  colnames(edge)
-  colnames(edge) <- c("source", "target","weight","direction","fromAltName","toAltName")
-
-  node <- read.delim("7.wgcna/merge_CytoscapeInput-nodes-darkmagenta.txt")
-  colnames(node)  
-  colnames(node) <- c("id","altName","node_attributes") 
-
-  createNetworkFromDataFrames(node,edge[1:50,], title="methane production network", collection="DataFrame Example")
-
-################ customise the network visualization ##################################
-# use other pre-set visual style
-  setVisualStyle('Marquee')
-
-# set up my own style
-  style.name = "myStyle"
-  defaults <- list(NODE_SHAPE="diamond",
-                 NODE_SIZE=30,
-                 EDGE_TRANSPARENCY=120,
-                 NODE_LABEL_POSITION="W,E,c,0.00,0.00")
-  nodeLabels <- mapVisualProperty('node label','id','p')
-  nodeFills <- mapVisualProperty('node fill color','node_attributes','d',c("A","B"), c("#FF9900","#66AAAA"))
-  arrowShapes <- mapVisualProperty('Edge Target Arrow Shape','interaction','d',c("activates","inhibits","interacts"),c("Arrow","T","None"))
-  edgeWidth <- mapVisualProperty('edge width','weight','p')
-
-  createVisualStyle(style.name, defaults, list(nodeLabels,nodeFills,arrowShapes,edgeWidth))
-  setVisualStyle(style.name)
-
