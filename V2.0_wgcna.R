@@ -266,7 +266,7 @@ moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples)
 
 # create module-trait heatmap
 # Will display correlations and their p-values
-pdf("7.wgcna/9.Module-trait_relationships_heatmap.pdf", width=14, height =10)
+pdf("7.wgcna/8.Module-trait_relationships_heatmap.pdf", width=14, height =10)
 textMatrix <- paste(signif(moduleTraitCor, 2), "\n(", signif(moduleTraitPvalue, 1), ")", sep = "")
 dim(textMatrix) <- dim(moduleTraitCor)
 par(mar = c(6, 8.5, 3, 3))
