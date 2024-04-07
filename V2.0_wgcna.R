@@ -381,7 +381,7 @@ for (i in names(geneModuleMembership)) {
   genenames = rownames(geneTraitSignificance)
   print(paste("There are ", length(genenames[moduleGenes]), " genes in the ", module, " module.", sep = ""))
   
-  # NOTE: This makes hidden variables with the OTU names: brown_OTUs, yellow_OTUs
+  # NOTE: This makes hidden variables with the gene names
   assign(paste(module, "_genes", sep = ""), genenames[moduleGenes])
 }   
 
