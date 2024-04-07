@@ -11,6 +11,27 @@ library(enrichplot)
 
 # system("mkdir 7.wgcna/deseq2.YG.PVR")
 
+# Load the count data and metadata
+countData<-read.csv("5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix",sep="\t", header=T, check.names=F)
+# run the below step if you want to remove any of the samples with poor mapping rates, as including this might induce noise in the deseq2 results
+countData<-countData[ , !names(countData) %in% c("7085","7073")]# Remove 7085 and 7073 as they had poor mapping rates
+
+# Remove the .bam, control, low, medium and high from the column names
+colnames(countData)<-gsub(".bam","",colnames(countData))
+colnames(countData)<-gsub("Control","",colnames(countData))
+colnames(countData)<-gsub("Low","",colnames(countData))
+colnames(countData)<-gsub("Medium","",colnames(countData))
+colnames(countData)<-gsub("High","",colnames(countData))
+
+orig_names <- names(countData) # keep a back-up copy of the original names
+geneID <- countData$Geneid# Convert count data to a matrix of appropriate form that DEseq2 can read
+countData <- as.matrix(countData[ , -1]) #removing first column geneID from the table
+# make sure the rownames are gene ids and first column onwards should be samples. any other columns should be removed.otherwise deseq2 will throw error.
+sampleIndex <- colnames(countData)
+countData <- as.matrix(countData[,sampleIndex])
+rownames(countData) <- geneID
+head(countData)
+
 # extract genes from the inetersting modules
 yg_pvr = geneInfo %>% filter(moduleColor %in% "yellowgreen" | moduleColor %in% "palevioletred3")
 yellowgreen = geneInfo %>% filter(moduleColor %in% "yellowgreen")
