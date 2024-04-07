@@ -481,3 +481,6 @@ pdf("7.wgcna/11.Eigengene_adjacency_heatmap.pdf", width=14, height=10)
 plotEigengeneNetworks(MET, "Eigengene adjacency heatmap", marHeatmap = c(3,4,2,2),
                       plotDendograms = TRUE, xLabeles = 90)
 dev.off()
+
+# Save the entire workspcae if you want to
+save.image(file = "7.wgcna/wgcna_work_space.RData")
