@@ -1,6 +1,7 @@
 # This R script does a differential expression analysis on the two important modules with highest correlations to methane production.
 # yellow green and palevioletred3 modules
 
+library(DESeq2)
 library(stringr)
 library(clusterProfiler)
 library(pathview)
@@ -69,7 +70,7 @@ deseq2Data <- DESeq(deseq2Data)
 # make sure to change the filenames with the cutoff values before saving the deg file (Line 60)
 
 pval = 0.1
-lfc = 0.584
+lfc = 0
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
 downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
@@ -82,7 +83,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
+  #write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
