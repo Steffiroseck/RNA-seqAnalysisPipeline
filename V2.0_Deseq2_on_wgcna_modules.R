@@ -10,7 +10,10 @@ library(AnnotationHub)
 library(ggridges)
 library(enrichplot)
 
-# system("mkdir 7.wgcna/deseq2.YG.PVR")
+# set the working directory
+setwd("/mnt/sda1/00_fastq/Sheep/")
+# create a directory to store the results
+system("mkdir 8.wgcna.enrichments")
 
 # Load the count data and metadata
 countData<-read.csv("5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix",sep="\t", header=T, check.names=F)
