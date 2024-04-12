@@ -1,0 +1,486 @@
+# set the working directory
+setwd("/mnt/sda1/00_fastq/Sheep")
+
+# create a directory to store the results for wgcna analysis
+#system("mkdir 7.wgcna")
+
+# Load the libraries
+
+library(WGCNA)
+library(flashClust)
+library(curl)
+library(DESeq2)
+library(dplyr)
+library(gridExtra)
+library(ggplot2)
+library(tidyverse)
+library(CorLevelPlot)
+
+# The following setting is important, do not omit.
+options(stringsAsFactors = FALSE);
+allowWGCNAThreads()          # allow multi-threading (optional)
+
+##################################################################################################
+# Read the gene counts table and metadata
+##################################################################################################
+
+data=read.csv("5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix",header=T,row.names=1,sep="\t", check.names = FALSE)
+colnames(data)<-gsub(".bam","",colnames(data))
+colnames(data)<-gsub("Control","",colnames(data))
+colnames(data)<-gsub("Low","",colnames(data))
+colnames(data)<-gsub("Medium","",colnames(data))
+colnames(data)<-gsub("High","",colnames(data))
+  
+# Read the metadata
+sample_metadata = read.csv(file = "metadata_with_methaneinfoadded_metadata.csv")
+rownames(sample_metadata) <- sample_metadata$ID
+sample_metadata$ID <- factor(sample_metadata$ID)
+rownames(sample_metadata)<-gsub("[a-zA-Z ]", "", rownames(sample_metadata))
+
+###########################################################################################
+# QC - outlier detection
+###########################################################################################
+  
+# detect outlier genes
+gsg <- goodSamplesGenes(t(data))
+summary(gsg)
+gsg$allOK
+  
+table(gsg$goodGenes) # 25030 genes passed
+table(gsg$goodSamples)
+  
+# if allOK returen false, remove genes that are detectd as outliers
+data <- data[gsg$goodGenes == TRUE,]
+  
+# detect outlier samples - hierarchical clustering - method 1
+pdf("7.wgcna/1.hclust_samples.pdf")
+sampleTree <- hclust(dist(t(data)), method = "average") #Clustering samples based on distance 
+#Setting the graphical parameters
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+# Plotting the cluster dendrogram
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+dev.off()
+  
+# detect outlier samples - pca - method 2
+pca <- prcomp(t(data))
+pca.dat <- pca$x
+  
+pca.var <- pca$sdev^2
+pca.var.percent <- round(pca.var/sum(pca.var)*100, digits = 2)
+  
+pca.dat <- as.data.frame(pca.dat)
+pdf("7.wgcna/2.pca.pdf")
+ggplot(pca.dat, aes(PC1, PC2)) +
+  geom_point() +
+  geom_text(label = rownames(pca.dat)) +
+  labs(x = paste0('PC1: ', pca.var.percent[1], ' %'),
+        y = paste0('PC2: ', pca.var.percent[2], ' %'))
+dev.off()
+  
+# exclude outlier samples (do this if you have any samples to be excluded based on the pca)
+#samples.to.be.excluded <- c('GSM4615000', 'GSM4614993', 'GSM4614995')
+#data.subset <- data[,!(colnames(data) %in% samples.to.be.excluded)]
+  
+#####################################################################################
+# Normalization
+###################################################################################
+# create a deseq2 dataset
+# making the rownames and column names identical
+# Put the columns of the count data in the same order as rows names of the sample mapping, then make sure it worked
+  data <- data[,unique(rownames(sample_metadata))]
+  all(colnames(data) == rownames(sample_metadata))
+
+# create dds
+  dds <- DESeqDataSetFromMatrix(countData = data,
+                              colData = sample_metadata,
+                              design = ~ 1) # not spcifying model
+
+## remove all genes with counts < 10 in more than 75% samples (22*0.75 = 16.5) 
+## suggested by WGCNA on RNAseq FAQ
+
+  dds75 <- dds[ rowSums(counts(dds) >= 10) >= 16.5, ]
+  nrow(dds75) #16417
+
+# perform variance stabilization
+  dds_norm <- vst(dds75)
+
+# get normalized counts
+  norm.counts <- assay(dds_norm) %>% 
+  t()
+
+###################################################################################################
+# Choosing the soft-thresholding power: analysis of network topology
+###################################################################################################
+# Choose a set of soft-thresholding powers
+powers <- c(c(1:10), seq(from = 12, to=20, by=2))
+
+# Call the network topology analysis function
+sft <- pickSoftThreshold(norm.counts, powerVector = powers, verbose = 5)
+
+# Plot the results:
+pdf("7.wgcna/3.power_threshold.pdf")
+par(mfrow = c(1,2))
+# Set some parameters
+cex1 = 0.9
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], 
+     xlab="Soft Threshold (powers)",ylab="Scale Free Topology Model Fit,signed R^2",type="n", 
+     main = paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3]) * sft$fitIndices[,2],
+     labels=powers,cex=cex1,col="red")
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.80,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5], 
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+     main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+cex1 = 0.9
+dev.off()
+
+# convert matrix to numeric
+norm.counts[] <- sapply(norm.counts, as.numeric)
+
+softPower <- 14
+# calling adjacency function
+adjacency <- adjacency(norm.counts, power = softPower, type="signed")
+# TOM
+TOM <- TOMsimilarity(adjacency, TOMType = "signed")#This gives similarity between genes
+TOM.dissimilarity <- 1-TOM # get dissimilarity matrix
+
+# Hierarchical Clustering Analysis
+#The dissimilarity/distance measures are then clustered using linkage hierarchical clustering and a dendrogram (cluster tree) of genes is constructed.
+# creating the dendrogram 
+hclustGeneTree <- hclust(as.dist(TOM.dissimilarity), method = "average")
+
+# Plot the resulting clustering tree (dendogram)
+pdf("7.wgcna/4.dendrogram_gene_clustering_TOM_dissimilarity.pdf")
+plot(hclustGeneTree, xlab = "", sub = "", 
+     main = "Gene Clustering on TOM-based disssimilarity", 
+     labels = FALSE, hang = 0.04)
+dev.off()
+
+##############################################################################
+# identify modules
+##############################################################################
+# Make the modules larger, so set the minimum higher
+minModuleSize <- 30
+
+# Module ID using dynamic tree cut
+dynamicMods <- cutreeDynamic(dendro = hclustGeneTree, 
+                             distM = TOM.dissimilarity,
+                             deepSplit = 2, pamRespectsDendro = FALSE,
+                             minClusterSize = minModuleSize)
+							 
+table(dynamicMods)#returns a table of the counts of factor levels in an object. In this case how many genes are assigned to each created module.
+
+# Convert numeric lables into colors
+dynamicColors <- labels2colors(dynamicMods)
+table(dynamicColors)#returns the counts for each color (aka the number of genes within each module) 
+
+# Plot the dendrogram and colors underneath
+pdf("7.wgcna/5.Gene_dendrogram_with_modulecolors.pdf")
+plotDendroAndColors(hclustGeneTree, dynamicColors, "Dynamic Tree Cut", 
+                    dendroLabels = FALSE, hang = 0.03, 
+                    addGuide = TRUE, guideHang = 0.05, 
+                    main = "Gene dendrogram and module colors")
+dev.off()
+
+# Calculate the module eigengenes
+dynamic_MEList <- moduleEigengenes(norm.counts, colors = dynamicColors)
+dynamic_MEs <- dynamic_MEList$eigengenes
+head(dynamic_MEs)
+
+#To further condense the clusters (branches) into more meaningful modules you can cluster modules based on pairwise eigengene correlations 
+#and merge the modules that have similar expression profiles.
+# Calculate dissimilarity of module eigengenes
+dynamic_MEDiss <- 1-cor(dynamic_MEs) #Calculate eigengene dissimilarity
+dynamic_METree <- hclust(as.dist(dynamic_MEDiss), method = "average")#Clustering eigengenes 
+
+# Plot the hclust
+pdf("7.wgcna/6.Clustering of module eigengenes.pdf")
+plot(dynamic_METree, main = "Dynamic Clustering of module eigengenes",
+     xlab = "", sub = "",)
+abline(h=.25, col = "red") #a height of .25 corresponds to correlation of .75
+dev.off()
+
+########################################################################
+# Merge similar modules
+########################################################################
+dynamic_MEDissThres <- 0.25
+
+# Call an automatic merging function
+merge_dynamic_MEDs <- mergeCloseModules(norm.counts, dynamicColors, cutHeight = dynamic_MEDissThres, verbose = 3)
+
+# The Merged Colors
+dynamic_mergedColors <- merge_dynamic_MEDs$colors
+
+# Eigen genes of the new merged modules
+mergedMEs <- merge_dynamic_MEDs$newMEs
+mergedMEs
+
+table(dynamic_mergedColors)
+
+# dendrogram with original and merged modules
+pdf("7.wgcna/7.original_and_merged_modules_dendrogram.pdf")
+plotDendroAndColors(hclustGeneTree, cbind(dynamicColors, dynamic_mergedColors),
+                    c("Dynamic Tree Cut", "Merged dynamic"),
+                      dendroLabels = FALSE, hang = 0.03,
+                      addGuide = TRUE, guideHang = 0.05,main = "Gene dendrogram and module colors for original and merged modules")
+dev.off()
+
+# Rename Module Colors 
+moduleColors <- dynamic_mergedColors
+
+# Construct numerical labels corresponding to the colors 
+colorOrder <- c("grey", standardColors(50))
+moduleLabels <- match(moduleColors, colorOrder)-1
+MEs <- mergedMEs
+
+save(MEs, moduleLabels, moduleColors, hclustGeneTree, file = "7.wgcna/wgcna-networkConstruction.RData")
+
+#####################################################################################
+# Relating modules to external traits
+#####################################################################################
+# pull out all continuous traits
+allTraits <- sample_metadata[,c(3:5)]
+# sample names should be consistent in eigen genes and traits !!!!
+allTraits = allTraits[match(rownames(MEs), rownames(allTraits)), ]
+table(rownames(MEs) == rownames(allTraits))
+
+# define numbers of genes and samples
+nGenes <- ncol(norm.counts)
+nSamples <- nrow(norm.counts)
+
+# Recalculate MEs with color labels
+MEs0 <- moduleEigengenes(norm.counts, moduleColors)$eigengenes
+MEs <- orderMEs(MEs0)
+
+names(MEs) <- substring(names(MEs), 3)
+
+moduleTraitCor <- cor(MEs, allTraits, use = "p")
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples)
+
+# create module-trait heatmap
+# Will display correlations and their p-values
+pdf("7.wgcna/8.Module-trait_relationships_heatmap.pdf", width=14, height =10)
+textMatrix <- paste(signif(moduleTraitCor, 2), "\n(", signif(moduleTraitPvalue, 1), ")", sep = "")
+dim(textMatrix) <- dim(moduleTraitCor)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap
+labeledHeatmap(Matrix = moduleTraitCor, 
+               xLabels = names(allTraits),
+               yLabels = names(MEs), 
+               ySymbols = names(MEs), 
+               colorLabels = FALSE, 
+               colors = blueWhiteRed(50),
+               textMatrix = textMatrix, 
+               setStdMargins = FALSE,
+               cex.text = 0.8,
+               zlim = c(-1,1),
+               main = paste("Module-trait Relationships"))
+			   
+dev.off()
+
+#Each row corresponds to a module eigengene, and the columns correspond to a trait. 
+#Each cell contains a p-value and correlation. Those with strong positive correlations are shaded a darker red while those with stronger negative correlations become more blue. 
+
+# heatmap with significance as stars (*)
+  heatmap.data <- merge(MEs , allTraits, by = 'row.names')
+  head(heatmap.data)
+  heatmap.data <- heatmap.data %>% 
+  column_to_rownames(var = 'Row.names')
+  pdf("7.wgcna/9.Module-trait_relationships_with_significance.pdf", width=14, height=10)
+  CorLevelPlot(heatmap.data,
+             x = names(heatmap.data)[18:20],
+             y = names(heatmap.data)[1:17],
+             col = c("blue1", "skyblue", "white", "pink", "red"),
+			       signifSymbols = c("***", "**", "*", ""),
+             signifCutpoints = c(0, 0.001, 0.01, 0.05, 1),
+             rotLabX = 30, rotLabY = 30)
+  dev.off()
+
+#####################################################################################################
+# Target gene identification
+# Gene relationship to trait and important modules
+#####################################################################################################
+
+# To Quantify associations of individual gene with trait of interest (methane production)
+# For this first define gene significance (GS) as the absolute value of the correlation between the gene and the trait.
+# For each module, also define a quantitative measure of module membership (MM) as the correlation of the module eigngene and the gene expression profile. Allows us to quantify the similarity of all genes on the array to every module.
+
+# Define variable weight containing the weight column of datTrait
+metpro <- as.data.frame(allTraits$CH4production)
+names(metpro) <- "CH4production" # rename
+
+# Calculate the correlations between modules
+geneModuleMembership <- as.data.frame(WGCNA::cor(norm.counts, MEs, use = "p"))
+
+# What are the p-values for each correlation?
+MMPvalue <- as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples))
+
+# What's the correlation for the trait: methane production?
+geneTraitSignificance <- as.data.frame(cor(norm.counts, metpro, use = "p"))
+
+# What are the p-values for each correlation?
+GSPvalue <- as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples = nSamples))
+
+names(geneTraitSignificance) <- paste("GS.", names(metpro), sep = "")
+names(GSPvalue) <- paste("p.GS.", names(metpro), sep = "")
+
+#################################################################################################################################################
+# Intramodular analysis: identify genes with high GS and MM
+# Using GS and MM, let’s identify genes with a high significance for methane production as well as high module membership in interesting modules.
+#################################################################################################################################################
+
+modNames <- names(geneModuleMembership)
+
+pdf("7.wgcna/10.Gene_signicance_Module_membership.pdf", width=14, height=10)
+par(mfrow = c(2,3))  
+  
+# Initialize for loop
+      # NEED: modNames
+for (i in names(geneModuleMembership)) {
+  
+  # Pull out the module we're working on
+  module <- i
+  print(module)   
+  
+  # Find the index in the column of the dataframe 
+  column <- match(module, modNames)
+  #print(column)
+  
+  # Pull out the Gene Significance vs module membership of the module
+  moduleGenes = moduleColors == module
+  genenames = rownames(geneTraitSignificance)
+  print(paste("There are ", length(genenames[moduleGenes]), " genes in the ", module, " module.", sep = ""))
+  print(genenames[moduleGenes])
+  
+  # Make the plot
+  verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]), 
+                 abs(geneTraitSignificance[moduleGenes, 1]),
+                 xlab = paste("Module Membership in", module, "module"),
+                 ylab = "Gene significance for methane production",
+                 main = paste("Module membership vs. gene significnace \n"),
+                 cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = module)
+}    
+dev.off()
+
+# Print the number of genes in each module
+for (i in names(geneModuleMembership)) {
+  # Pull out the module we're working on
+  module <- i
+  # Find the index in the column of the dataframe 
+  column <- match(module, modNames)
+  # Pull out the Gene Significance vs module membership of the module
+  moduleGenes = moduleColors == module
+  genenames = rownames(geneTraitSignificance)
+  print(paste("There are ", length(genenames[moduleGenes]), " genes in the ", module, " module.", sep = ""))
+  
+  # NOTE: This makes hidden variables with the gene names
+  assign(paste(module, "_genes", sep = ""), genenames[moduleGenes])
+}   
+
+# merge this important module information with gene annotation information and write out a file that summarizes the results.
+# Combine pval, module membership, and gene significance into one dataframe
+
+# Prepare pvalue df
+GSpval <- GSPvalue %>%
+  tibble::rownames_to_column(var = "gene")
+
+# Prepare module membership df
+gMM_df <- geneModuleMembership %>%
+  tibble::rownames_to_column(var = "gene") %>%
+  gather(key = "moduleColor", value = "moduleMemberCorr", -gene) 
+
+# Prepare gene significance df
+GS_metprod_df <- geneTraitSignificance %>%
+  data.frame() %>%
+  tibble::rownames_to_column(var = "gene")
+
+# Put everything together 
+allData_df <- gMM_df %>%
+  left_join(GS_metprod_df, by = "gene") %>%
+  left_join(GSpval, by = "gene") 
+
+# Write a file 
+write.csv(allData_df, file = "7.wgcna/allData_df_WGCNA.csv")
+
+#identifying genes with high GS and MM for significant module (GS > 0.2 & MM > 0.8)
+# 1. methane production trait in yellowgreen
+module = "yellowgreen"
+column = match(module, modNames)
+moduleGenes = moduleColors==module
+intra_modular_analysis=data.frame(abs(geneModuleMembership[moduleGenes, column]),abs(geneTraitSignificance[moduleGenes, 1]))
+rownames(intra_modular_analysis) = colnames(norm.counts)[moduleColors=="yellowgreen"] #only the yellowgreen module
+head(intra_modular_analysis)
+colnames(intra_modular_analysis)<- c("abs.geneModuleMembership.moduleGenes", "abs.geneTraitSignificance.moduleGenes")
+intra_modular_analysis.hubgene = subset(intra_modular_analysis, abs.geneModuleMembership.moduleGenes>0.8 & abs.geneTraitSignificance.moduleGenes > 0.2)
+write.csv(intra_modular_analysis.hubgene, file = "7.wgcna/Hubgenes_with_high_GS_MM_in_yellowgreen_methaneproduction.csv")
+
+#high intramodular connectivity ~ high kwithin => hub genes (kwithin: connectivity of the each driver gene in the darkmagenta module to all other genes in the darkmagenta)
+connectivity = intramodularConnectivity(adjacency, moduleColors)
+connectivity = connectivity[colnames(norm.counts)[moduleColors=="yellowgreen"],] #only the yellowgreen module
+order.kWithin = order(connectivity$kWithin, decreasing = TRUE)
+connectivity = connectivity[order.kWithin,] #order rows following kWithin
+connectivity %>% head(10)#top 10 genes that have a high connectivity to other genes in the yellowgreen module
+write.csv(connectivity,"7.wgcna/genes_ordered_with_high_connectivity_yellowgreenmodule.csv")#top genes would be the one with high connectivity
+
+
+################################################################################
+# Hub genes from each module
+################################################################################
+#Hub genes
+hub = chooseTopHubInEachModule(norm.counts, moduleColors)
+write.csv(hub, file = "7.wgcna/hub_genes_in_each_module.csv") 
+
+
+#Identifying most important genes for one determined characteristic inside of the cluster
+probes = colnames(norm.counts)
+geneInfo = data.frame(Genes = probes,
+           moduleColor = moduleColors,
+           geneTraitSignificance,
+           GSPvalue)
+#Order modules by their significance for trait
+modOrder = order(-abs(cor(MEs, metpro, use = "p")))
+  
+for (mod in 1:ncol(geneModuleMembership))
+{
+  oldNames = names(geneInfo)
+  geneInfo0 = data.frame(geneInfo, geneModuleMembership[, modOrder[mod]], 
+                         MMPvalue[, modOrder[mod]]);
+  names(geneInfo0) = c(oldNames, paste("MM.", modNames[modOrder[mod]], sep=""),
+                       paste("p.MM.", modNames[modOrder[mod]], sep=""))
+ }
+geneOrder = order(geneInfo$moduleColor, -abs(geneInfo$GS.CH4production))
+geneInfo = geneInfo[geneOrder, ]
+write.csv(geneInfo, file = "7.wgcna/geneInfo_methaneproduction.csv")
+
+
+#############################################################################
+# Visualizing the network of eigengenes
+#############################################################################
+
+# Reclaculate module eigengenes
+MEs = moduleEigengenes(norm.counts, moduleColors)$eigengenes
+
+# Isolate weight from the clinical traits
+metprod <- as.data.frame(metpro$CH4production)
+names(metprod) = "methane_production"
+
+# Add the weight to existing module eigengenes
+MET <- orderMEs(cbind(MEs, metprod))
+#names(MET) <- substring(names(MET), 3)
+
+# Plot the heatmap 
+pdf("7.wgcna/11.Eigengene_adjacency_heatmap.pdf", width=14, height=10)
+plotEigengeneNetworks(MET, "Eigengene adjacency heatmap", marHeatmap = c(3,4,2,2),
+                      plotDendograms = TRUE, xLabeles = 90)
+dev.off()
+
+# Save the entire workspcae if you want to
+save.image(file = "7.wgcna/wgcna_work_space.RData")
