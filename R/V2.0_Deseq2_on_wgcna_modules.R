@@ -141,36 +141,36 @@ ans.go <- enrichGO(gene = res_Genes, ont = "ALL",
                    readable=TRUE,
                    pvalueCutoff = 0.05)
 tab.go <- as.data.frame(ans.go)
-write.csv(tab.go,"8.geneset.enrichments/WGCNA_Yg_Pvr_GO_enrichments.csv")
+write.csv(tab.go,"8.wgcna.enrichments/WGCNA_Yg_GO_enrichments.csv")
 
 ans.kegg <- enrichKEGG(gene = res_Genes,
                        organism = 'oas',
                        pvalueCutoff = 0.05)
 tab.kegg <- as.data.frame(ans.kegg)
-write.csv(tab.kegg,"8.geneset.enrichments/WGCNA_Yg_Pvr_KEGG_enrichments.csv")
+write.csv(tab.kegg,"8.wgcna.enrichments/WGCNA_Yg_KEGG_enrichments.csv")
 
 #####################################################
 # VISUALIZATIONS OF GO AND KEGG ENRICHMENTS
 #####################################################
 
-pdf("8.geneset.enrichments/WGCNA_Yg_Pvr_GO-Barplot.pdf", height=14)
+pdf("8.wgcna.enrichments/WGCNA_Yg_GO-Barplot.pdf", height=14)
 barplot(ans.go, showCategory=20)
 dev.off()
 
-pdf("8.geneset.enrichments/WGCNA_Yg_Pvr_upsetplot_GO.pdf")
+pdf("8.wgcna.enrichments/WGCNA_Yg_upsetplot_GO.pdf")
 upsetplot(ans.go, showCategory=100)
 dev.off()
 
-pdf("8.geneset.enrichments/WGCNA_Yg_Pvr_upsetplot_kegg.pdf")
+pdf("8.wgcna.enrichments/WGCNA_Yg_upsetplot_kegg.pdf")
 upsetplot(ans.kegg, showCategory=30)
 dev.off()
 
-pdf("8.geneset.enrichments/WGCNA_Yg_Pvr_emapplot_kegg.pdf", width=12)
+pdf("8.wgcna.enrichments/WGCNA_Yg_emapplot_kegg.pdf", width=12)
 emapplot(pairwise_termsim(ans.kegg))
 dev.off()
 
 # In order to consider the potentially biological complexities in which a gene may belong to multiple annotation categories,  cnetplot function will extract the complex association between genes and pathways.
-pdf("8.geneset.enrichments/WGCNA_Yg_Pvr_cnetplot_kegg.pdf", width=12)
+pdf("8.wgcna.enrichments/WGCNA_Yg_cnetplot_kegg.pdf", width=12)
 cnetplot(ans.kegg, categorySize="pvalue", foldChange=res_Genes)
 dev.off()
 
@@ -199,6 +199,6 @@ x <- pathview(gene.data  = geneList,
               species    = keggspecies,
               gene.idtype = "KEGG",
               limit      = list(gene=max(abs(geneList)), cpd=1),
-             #kegg.dir="8.geneset.enrichments/wgcna_YG_PVR_pathview")
+             #kegg.dir="8.wgcna.enrichments/wgcna_YG_pathview")
 
-# The .pathview images will be generated in the current directory, whereas .xml and original kegg images will be in the 8.geneset.enrichments/wgcna_YG_PVR_pathview folder.
+# The .pathview images will be generated in the current directory, whereas .xml and original kegg images will be in the 8.wgcna.enrichments/wgcna_YG_pathview folder.
