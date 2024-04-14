@@ -199,6 +199,6 @@ x <- pathview(gene.data  = geneList,
               species    = keggspecies,
               gene.idtype = "KEGG",
               limit      = list(gene=max(abs(geneList)), cpd=1),
-             #kegg.dir="8.wgcna.enrichments/wgcna_YG_pathview")
+             #kegg.dir="8.wgcna.enrichments/wgcna_YG_pathview"))
 
 # The .pathview images will be generated in the current directory, whereas .xml and original kegg images will be in the 8.wgcna.enrichments/wgcna_YG_pathview folder.
