@@ -90,6 +90,13 @@ gtffile="/mnt/sda1/00_fastq/Sheep/Reference_genome/genomic.gtf"
 
 featureCounts -T 8 -t 'gene' -g 'gene_id' -f -a $gtffile -o 5.featurecounts/Lambs.featurecounts.hisat2 4.hisat2/*.bam
 
+# -T specfies the number of threads to be used
+# -t specifies the feature type. By default it is 'exon', but in the above command I have specified 'gene'
+# -g specifies the attribute type in GTF annotation. By default it is 'gene_id'
+# -f specifies to perform the read counting at the feature level (eg. counting reads for exons rather than genes)
+# -a specifies the annotation file
+# -o specifies the name of the output file
+
 ## Since the featureCounts output has additional columns with information about genomic coordinates, gene length etc., 
 ## we can use the cut command to select only those columns that you are interested in. Columns 1 and sample wise counts columns
 
@@ -98,7 +105,7 @@ echo "Read count matrix generated!"
 echo "Have a look at the counts matrix. You may change the column names if needed.."
 echo "To ready this text file (count matrix) for the next step of differential gene expression analysis, you will need to clean it up further by removing the first header line, and modifying the column names (headers) to simpler, smaller sampleIDs.
 echo "An example of tidying the file is as shown below:
-## vim 4.featurecounts.ARS.5/LambAllSamples.featureCounts.Rmatrix.txt
+## vim 5.featurecounts/Lambs.featurecounts.hisat2.Rmatrix
 ##dd
 ##gg
 ##:%s/4.hisat2\///g
