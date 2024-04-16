@@ -79,8 +79,7 @@ for R1 in 2.trimmomatic/*_R1_paired.fastq.gz; do
     | samtools sort -O BAM | tee 4.hisat2/$sample.bam \
     | samtools index - 4.hisat2/$sample.bam.bai &> 4.hisat2/$sample.hisat2Log.txt;
 done
-echo "Alignment finished succesfully!"
-
+echo "Alignment finished succesfully!" 
 
 # Step 5 Generate read counts matrix using featureCounts
 # When you want to analyze the data for differential gene expression analysis, it would be convenient to have counts for all samples in a single file (gene count matrix).
