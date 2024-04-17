@@ -73,13 +73,18 @@ threads=8
 for R1 in 2.trimmomatic/*_R1_paired.fastq.gz; do
     R2=$(echo $R1| sed 's/_R1_/_R2_/'); 
     sample=$(echo $R1|sed 's/_R1_paired.fastq.gz//'|sed 's/2.trimmomatic\///'); 
-    echo hisat2 -q --summary-file 4.hisat2/$sample.summary.txt \
-    --threads $threads -x /mnt/sda1/00_fastq/Sheep/Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
-    -1 $R1 -2 $R2 | tee >(samtools flagstat - > 4.hisat2/$sample.flagstat) \
-    | samtools view -bS - > | tee 4.hisat2/$sample.bam \
-    | samtools index - 4.hisat2/$sample.bam.bai &> 4.hisat2/$sample.hisat2Log.txt;
+    echo hisat2 -q --summary-file 4.hisat2/$sample.summary.txt --threads $threads \
+    -x /mnt/sda1/00_fastq/Sheep/Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
+    -1 $R1 -2 $R2 | samtools view -bS > 4.hisat2/$sample.bam;
 done
 echo "Alignment finished succesfully!" 
+
+# Index the bam file
+for i in 4.hisat2/*.bam
+  do
+    echo "Indexing $i ..."
+    samtools index $i 
+  done
 
 # To get mapped reads from the bam file,
 # samtools view -b -F 4 7220.bam > 7220.mapped.bam
