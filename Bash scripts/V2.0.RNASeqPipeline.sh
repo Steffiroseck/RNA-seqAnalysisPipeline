@@ -76,10 +76,13 @@ for R1 in 2.trimmomatic/*_R1_paired.fastq.gz; do
     echo hisat2 -q --summary-file 4.hisat2/$sample.summary.txt \
     --threads $threads -x /mnt/sda1/00_fastq/Sheep/Reference_genome/GCF_016772045.2_ARS-UI_Ramb_v3.0_genomic.fna \
     -1 $R1 -2 $R2 | tee >(samtools flagstat - > 4.hisat2/$sample.flagstat) \
-    | samtools sort -O BAM | tee 4.hisat2/$sample.bam \
+    | samtools view -bS - > | tee 4.hisat2/$sample.bam \
     | samtools index - 4.hisat2/$sample.bam.bai &> 4.hisat2/$sample.hisat2Log.txt;
 done
 echo "Alignment finished succesfully!" 
+
+# To get mapped reads from the bam file,
+# samtools view -b -F 4 7220.bam > 7220.mapped.bam
 
 # Step 5 Generate read counts matrix using featureCounts
 # When you want to analyze the data for differential gene expression analysis, it would be convenient to have counts for all samples in a single file (gene count matrix).
