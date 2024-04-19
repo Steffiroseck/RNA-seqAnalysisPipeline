@@ -23,6 +23,11 @@ mkdir 4.hisat2
 mkdir 5.featurecounts
 mkdir logs
 
+# To get the total number of reads from all the fastq files, run the command below. For this, make sure you have installed seqkit. If its not installed, run 
+# "conda install -c bioconda seqkit" or refer to https://github.com/shenwei356/seqkit
+
+seqkit stats -To stats.tsv *.fastq.gz
+
 # Step 1: Quality Control
 # Run FASTQC (2 minutes per sample)
 
