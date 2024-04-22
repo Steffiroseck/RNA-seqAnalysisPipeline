@@ -41,13 +41,13 @@ head(countData)
 yellowgreen = geneInfo %>% filter(moduleColor %in% "yellowgreen")
 
 # extract the raw counts for these genes in the modules
-ygLfcRaw <- countData[rownames(countData) %in% yellowgreen$Genes,]
+ygLfcRaw = countData[rownames(countData) %in% yellowgreen$Genes,]
 
 # removing "LOC" info
 rownames(ygLfcRaw) = stringr::str_remove(rownames(ygLfcRaw), "LOC")
 
 # Read the metadata file
-metaData <-read.csv("metadata_with_methaneinfoadded_metadata.csv",sep=",",header=T)
+metaData = read.csv("metadata_with_methaneinfoadded_metadata.csv",sep=",",header=T)
 #metaData1 = metaData[!grepl('Low|Medium', metaData$ID),]# To remove any rows with Low or medium in the ID column. (Only for test case)
 #metaData = metaData1
 dim(metaData)
@@ -85,7 +85,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  #write.csv(resSig , file=paste0("7.wgcna/deseq2.YG.PVR/",results[i],".0.05P.0LFC.updownDEGs.csv"), row.names = T)
+  #write.csv(resSig , file=paste0("7.wgcna/",results[i],"yellowgreen.0.05P.0LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
