@@ -91,6 +91,9 @@ for(i in 1:length(results)){
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
 
+resOrdered <- res[order(res$pvalue),]
+write.csv(as.data.frame(resOrdered),file="6.deseq2/CH4production_results.csv")
+
 # fold change = 0.5, Log2FC= -1 (2 fold decrease)
 # fc = 1.4, log2fc = 0.5 (1.5 times higher expression)
 # log2fc =0 means no change
@@ -104,8 +107,12 @@ for(i in 1:length(results)){
 #
  
 # 1. MA plot
+# shrinkage of LFC is importnt for visualization
+resultsNames(deseq2Data)
+resLFC <- lfcShrink(deseq2Data, coef="CH4production", type="apeglm")
+resLFC
 pdf("6.deseq2/MAplot.pdf")
-plotMA(res,main = "MA plot", alpha=0.1,colNonSig = "black", colSig = "red",colLine = "lightblue")
+plotMA(resLFC,main = "MA plot", alpha=0.05,colNonSig = "black", colSig = "red")
 dev.off()
 
 # 2. Volcano plot
