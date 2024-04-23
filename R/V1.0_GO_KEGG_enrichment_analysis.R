@@ -84,17 +84,15 @@ res_universe = sort(res_universe, decreasing = TRUE)
 res_sigGenes<-res_degs_with_entrez$ENTREZID
 res_sigGenes = sort(res_sigGenes, decreasing = TRUE)
 
-ans.go <- enrichGO(gene = res_sigGenes, ont = "ALL",
+ans.go <- enrichGO(gene = res_universe, ont = "ALL",
                    OrgDb =Oaries,
-                   universe = res_universe,
                    readable=TRUE,
                    pvalueCutoff = 0.05)
 tab.go <- as.data.frame(ans.go)
 write.csv(tab.go,"8.geneset.enrichments/GO_enrichments.csv")
 
-ans.kegg <- enrichKEGG(gene = res_sigGenes,
+ans.kegg <- enrichKEGG(gene = res_universe,
                        organism = 'oas',
-                       universe = res_universe,
                        pvalueCutoff = 0.05)
 tab.kegg <- as.data.frame(ans.kegg)
 write.csv(tab.kegg,"8.geneset.enrichments/KEGG_enrichments.csv")
