@@ -48,10 +48,6 @@ colSums(countData[,2:ncol(countData)])
 
 # Read the metadata file
 metaData <-read.csv("metadata_with_methaneinfoadded_metadata.csv",sep=",",header=T)
-#metaData1 = metaData[!grepl('Low|Medium', metaData$ID),]# To remove any rows with Low or medium in the ID column. (Only for test case)
-#metaData = metaData1
-dim(metaData)
-head(metaData)
 rownames(metaData) <- metaData$ID
 metaData$ID <- factor(metaData$ID)
 rownames(metaData)<-gsub("[a-zA-Z ]", "", rownames(metaData))
