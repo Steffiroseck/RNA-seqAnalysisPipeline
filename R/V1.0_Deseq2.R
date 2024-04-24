@@ -92,7 +92,7 @@ for(i in 1:length(results)){
 }
 
 resOrdered <- res[order(res$pvalue),]
-write.csv(as.data.frame(resOrdered),file="6.deseq2/CH4production_results.csv")
+write.csv(as.data.frame(resOrdered),file="6.deseq2/CH4production_deseq2_allresults.csv")
 
 # fold change = 0.5, Log2FC= -1 (2 fold decrease)
 # fc = 1.4, log2fc = 0.5 (1.5 times higher expression)
