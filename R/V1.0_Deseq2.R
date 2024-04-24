@@ -134,4 +134,6 @@ dev.off()
 
 # Extract the rawcounts for these significant genes (for WGCNA)
 #required_df <- countData[rownames(countData) %in% rownames(resSig1),]
+# or extract log2fc values for genes in yellowgreen module
+required_df1 <- res[rownames(res) %in% rownames(yellowgreen),]
 #write.table(as.data.frame(required_df), '6.deseq2/Control.vs.High.sig.genes.raw.counts.csv',quote=F, row.names=TRUE)
