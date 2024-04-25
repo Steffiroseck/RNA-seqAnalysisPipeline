@@ -85,7 +85,7 @@ for(i in 1:length(results)){
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  #write.csv(resSig , file=paste0("7.wgcna/",results[i],"yellowgreen.0.05P.0LFC.updownDEGs.csv"), row.names = T)
+  write.csv(resSig , file=paste0("7.wgcna/",results[i],"yellowgreen.0.1P.0LFC.updownDEGs.csv"), row.names = T)
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
