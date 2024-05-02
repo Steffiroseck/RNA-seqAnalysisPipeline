@@ -16,7 +16,7 @@ setwd("/mnt/sda1/RNA/40-815970407/Sheep")
 # extract annotation DB of sheep
 ah <- AnnotationHub()
 AnnotationHub::query(ah, c("Ovis", "aries"))
-Oaries <- ah[["AH111978"]]
+Oaries <- ah[["AH111978"]] #AH114632
 columns(Oaries) # see available identifiers that can be used in this package
 
 # create geneList, which is a list of all genes from deseq2 with p<0.1 and lfc =0
@@ -84,14 +84,14 @@ res_universe = sort(res_universe, decreasing = TRUE)
 res_sigGenes<-res_degs_with_entrez$ENTREZID
 res_sigGenes = sort(res_sigGenes, decreasing = TRUE)
 
-ans.go <- enrichGO(gene = res_universe, ont = "ALL",
+ans.go <- enrichGO(gene = res_sigGenes, ont = "ALL",
                    OrgDb =Oaries,
                    readable=TRUE,
                    pvalueCutoff = 0.05)
 tab.go <- as.data.frame(ans.go)
 write.csv(tab.go,"8.geneset.enrichments/GO_enrichments.csv")
 
-ans.kegg <- enrichKEGG(gene = res_universe,
+ans.kegg <- enrichKEGG(gene = res_sigGenes,
                        organism = 'oas',
                        pvalueCutoff = 0.05)
 tab.kegg <- as.data.frame(ans.kegg)
