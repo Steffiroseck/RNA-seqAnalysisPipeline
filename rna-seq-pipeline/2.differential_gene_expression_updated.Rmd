@@ -1,1 +1,1512 @@
+---
+title: "Deseq2_code"
+author: "Steffimol Rose"
+date: "2024-08-16"
+output: html_document
+knit: (function(inputFile, encoding) {
+      out_dir <- "C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/DEG/Methane_production/DGE_results/";
+      rmarkdown::render("Deseq2_final.Rmd", 
+                  output_file = 'C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/DEG/Methane_production/DGE_results_final.html')})
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Data/20Samples_FinalUsedforAnalysis/')
+
+```
+
+
+```{r set_out_dir}
+
+out_dir = "C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/DEG/"
+if(!dir.exists(out_dir)){
+  dir.create(out_dir)
+}
+
+```
+
+
+```{r load_libs, message=FALSE}
+# To downgrade packages: BiocManager::install(version = '3.19')
+
+library(DESeq2)
+library(dplyr)
+library(plyr)
+library(tidyverse)
+library(ggpubr)
+library(EnhancedVolcano)
+library(ggplot2)
+library(tidyverse)
+library(CorLevelPlot)
+library(DESeq2)
+library(stringr)
+library(dplyr)
+library(clusterProfiler)
+library(pathview)
+library(stringr)
+library(AnnotationDbi)
+library(AnnotationHub)
+library(ggridges)
+library(enrichplot)
+library(KEGGREST)
+library(EnrichmentBrowser)
+library(GSVA)
+library(pheatmap)
+
+```
+
+
+```{r}
+# load count data
+
+countData<-read.csv("20Samples_afterTrimming_6976removed_HISAT2.csv",sep=",", header=T, check.names=F)
+head(countData)
+dim(countData)
+
+orig_names <- names(countData) # keep a back-up copy of the original names
+geneID <- countData[,1] # Convert count data to a matrix of appropriate form that DEseq2 can read
+countData <- as.matrix(countData[ , -1]) 
+
+sampleIndex <- colnames(countData)
+countData <- as.matrix(countData[,sampleIndex])
+rownames(countData) <- geneID
+
+countData2<-countData
+
+
+# Calculate total number of columns
+total_columns <- ncol(countData2)
+
+
+zero_counts <- rowSums(countData2 == 0)
+length(zero_counts)
+table(zero_counts)
+
+# Filter rows where more than 70% are zero (zero_counts < 0.7 * total_columns = 14)
+
+# some values were NA, so finding it and adding names to NA column
+#names(countData2)[is.na(names(countData2)) | names(countData2) == ""] = paste0("gene", which(is.na(names(countData2)) | names(countData2) == ""))
+
+countData2 <- as.data.frame(countData2) %>% dplyr::filter(zero_counts < 0.7 * total_columns)
+dim(countData2)
+
+#mycounts <- countData[rowSums(countData)>=10,]
+mycounts <- countData2
+
+```
+```{r}
+# load metadata
+
+# metaData <-read.csv("C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Data/20Samples_FinalUsedforAnalysis/24lambs_for_plots.csv",sep=",",header=T)
+# head(metaData)
+# 
+# metaData$Ave_MO_new = metaData$Ave_MO/metaData$Final_BW
+
+# # create correlation plots
+# ggscatter(metaData, x = "Ave_MO_new", y = "CH4production", 
+#           add = "reg.line", conf.int = TRUE, 
+#           cor.coef = TRUE, cor.method = "pearson",
+#           #label = "LambID",size = "CH4production",font.label = c(9, "red"),repel= TRUE,color = "#00AFBB",
+#           xlab = "Average daily microalgae oil intake (g)", ylab = "Methane production (g/d)")
+# 
+# # methane yield
+# ggscatter(metaData, x = "Ave_MO_new", y = "CH4yield", 
+#           add = "reg.line", conf.int = TRUE, 
+#           cor.coef = TRUE, cor.method = "pearson",
+#           #label = "LambID",size = "CH4production",font.label = c(9, "red"),repel= TRUE,color = "#00AFBB",
+#           xlab = "Average daily microalgae oil intake (g)", ylab = "Methane production (g/DMI)")
+# 
+# metaData$Ave_MO_Per_kg_BWG = metaData$Ave_MO/metaData$Total_BWG
+# 
+# # create correlation plots
+# ggscatter(metaData, x = "Ave_MO_Per_kg_BWG", y = "CH4production", 
+#           add = "reg.line", conf.int = TRUE, 
+#           cor.coef = TRUE, cor.method = "pearson",
+#           #label = "LambID",size = "CH4production",font.label = c(9, "red"),repel= TRUE,color = "#00AFBB",
+#           xlab = "Average daily microalgae oil intake per kg body weight (g/d)", ylab = "Methane production (g/d)")
+# 
+# ggscatter(metaData, x = "Ave_MO_Per_kg_BWG", y = "CH4yield", 
+#           add = "reg.line", conf.int = TRUE, 
+#           cor.coef = TRUE, cor.method = "pearson",
+#           label = "LambID",size = "CH4production",font.label = c(9, "red"),repel= TRUE,color = "#00AFBB",
+#           xlab = "Average daily microalgae oil intake per kg body weight (g/d)", ylab = "Methane production (g/DMI)")
+
+```
+
+
+
+```{r}
+# load metadata
+
+metaData <-read.csv("20Samples_metadata_6976_removed.csv",sep=",",header=T)
+head(metaData)
+
+rownames(metaData) <- metaData$ID
+metaData$ID <- factor(metaData$ID)
+
+
+colnames(countData2) == metaData$ID
+colnames(countData2)
+metaData$ID
+
+#colnames(countData2)<-gsub("X", "", colnames(countData2))
+colnames(countData2)
+# Select the columns from countData2 that are in bno_values
+countData2 <- countData2[, colnames(countData2) %in% metaData$ID]
+
+dim(metaData)
+dim(countData2)
+
+#str(countData2)
+
+# create correlation plots
+ggscatter(metaData, x = "Ave_MO", y = "CH4production", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Microalgae oil (g/kg)", ylab = "Methane production (g/d)")
+
+# check assumptions
+# Shapiro-Wilk normality test for methane
+shapiro.test(metaData$CH4production)
+shapiro.test(metaData$scaled_CH4production) # => p = 0.83
+# Shapiro-Wilk normality test for wt
+shapiro.test(metaData$MO_acc_for_BW) # => p = 0.01, meaning data is not normally distributed
+
+res <- cor.test(metaData$MO_acc_for_BW, metaData$CH4production,
+                    method = "kendall")
+res
+
+# # get standard deviation 
+# library(tidyverse)
+# library(rstatix)
+# library(skimr)
+# 
+# skim(metaData)
+# metaData %>%
+#   get_summary_stats(CH4production, type = "mean_sd") %>%
+#   mutate(sd = 2 * sd) 
+# 
+# metaData %>% anova_test(CH4production ~ Treatment)
+# 
+# head(metaData)
+```
+
+```{r linear_discriminant_analysis_to_cluster}
+library(klaR)
+library(psych)
+library(MASS)
+library(tidyverse)
+library(caret)
+theme_set(theme_classic())
+library(devtools)
+
+head(metaData)
+data = metaData[,2:6]
+head(data)
+data$LambID = NULL
+
+
+head(data)
+# data partition
+# Split the data into training (80%) and test set (20%)
+set.seed(123)
+training.samples <- data$Treatment %>%
+  createDataPartition(p = 0.8, list = FALSE)
+train.data <- data[training.samples, ]
+test.data <- data[-training.samples, ]
+
+# Normalize the data. categorical variables are automatically ignored
+# Estimate preprocessing parameters
+preproc.param <- train.data %>% 
+  preProcess(method = c("center", "scale"))
+# Transform the data using the estimated parameters
+train.transformed <- preproc.param %>% predict(train.data)
+test.transformed <- preproc.param %>% predict(test.data)
+
+library(MASS)
+# Fit the model
+model <- lda(Treatment~., data = train.transformed)
+# Make predictions
+predictions <- model %>% predict(test.transformed)
+# Model accuracy
+mean(predictions$class==test.transformed$Treatment)
+
+# compute LDA
+library(MASS)
+model <- lda(Treatment~., data = train.transformed)
+model
+plot(model)
+
+# make predictions
+predictions <- model %>% predict(test.transformed)
+names(predictions)
+
+# Predicted classes
+head(predictions$class, 6)
+# Predicted probabilities of class memebership.
+head(predictions$posterior, 6) 
+# Linear discriminants
+head(predictions$x, 3) 
+
+#create LDA plot
+png("lda_lot_ch4_production.png")
+lda.data <- cbind(train.transformed, predict(model)$x)
+ggplot(lda.data, aes(LD1, LD2)) +
+  geom_point(aes(color = Treatment, shape=Treatment, size = 100))
+dev.off()
+
+#Model accuracy
+mean(predictions$class==test.transformed$Treatment)
+```
+
+
+```{r modelling methane variable}
+metaData$scaled_CH4production=scale(metaData$CH4production, center=TRUE)
+metaData$MO_acc_for_BW = metaData$Ave_MO/metaData$Final_BW
+metaData$CH4_acc_for_BW = metaData$scaled_CH4production/metaData$Final_BW
+
+# If using microalgae oil accounting for body weight, the  you need to adjust account for body weight pon methane production. So do the steps below;
+metaData$AdjCH4=residuals(lm(CH4_acc_for_BW ~ MO_acc_for_BW ,metaData))
+head(metaData)
+
+```
+
+```{r}
+
+metaData$scaled_CH4production=scale(metaData$CH4production, center=TRUE)
+metaData$scaled_Ave_MO = scale(metaData$Ave_MO, center = TRUE)
+metaData$MO_acc_for_BW = metaData$Ave_MO/metaData$Final_BW
+metaData$CH4_acc_for_BW = metaData$CH4production/metaData$Final_BW
+
+
+# For microalgae oil intake
+deseq2Data <- DESeqDataSetFromMatrix(countData=countData2, colData=metaData, design= ~ MO_acc_for_BW)
+# For methane production
+deseq2Data <- DESeqDataSetFromMatrix(countData=countData2, colData=metaData, design= ~ scaled_CH4production)
+
+deseq2Data <- estimateSizeFactors(deseq2Data)
+
+dim(deseq2Data)
+
+
+deseq2Data <- DESeq(deseq2Data)
+dim(deseq2Data)
+resultsNames(deseq2Data)
+
+```
+
+
+
+##### Filtering significant genes
+
+
+```{r}
+pval = 0.05
+lfc = 0.584
+results = resultsNames(deseq2Data)
+upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
+downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
+
+for(i in 2:length(results)){
+  
+  res = results(deseq2Data, 
+                name = results[i])# independent filtering occurs in this step to save you from multiple test correction on genes with no power
+  resorder <- res[order(res$padj),]
+  upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
+  downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
+  resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
+  write.csv(resSig , file=paste0(out_dir,results[i],".0.05P.0.584LFC.updownDEGs.csv"), row.names = T)
+  res_pval = subset(resorder, padj < pval )
+  upresultstable[results[i],"upDEGs"] = upDEGs
+  downresultstable[results[i],"downDEGs"] = downDEGs 
+}
+
+upDEGs
+downDEGs
+resSig
+
+summary(res)
+as.data.frame(resSig)
+
+```
+
+
+```{r plot_gene_counts}
+# get the normalized counts from deseq2
+dds <- estimateSizeFactors(deseq2Data)
+
+norma <- counts(dds, normalized=TRUE)
+LOC105603087 <- norma["LOC105603087",]
+NME4 <- norma["NME4",]
+MARCHF3 <- norma["MARCHF3",]
+PLXNB3 <- norma["PLXNB3",]
+LOC132657460 <- norma["LOC132657460",]
+LOC121819234 <- norma["LOC121819234",]
+LOC101116551 <- norma["LOC101116551",]
+
+LOC105603087 = as.data.frame(LOC105603087)
+NME4 = as.data.frame(NME4)
+MARCHF3 = as.data.frame(MARCHF3)
+PLXNB3 = as.data.frame(PLXNB3)
+LOC132657460 = as.data.frame(LOC132657460)
+LOC121819234 = as.data.frame(LOC121819234)
+LOC101116551 = as.data.frame(LOC101116551)
+
+LOC105603087$ID = rownames(LOC105603087)
+NME4$ID = rownames(NME4)
+MARCHF3$ID = rownames(MARCHF3)
+PLXNB3$ID = rownames(PLXNB3)
+LOC132657460$ID = rownames(LOC132657460)
+LOC121819234$ID = rownames(LOC121819234)
+LOC101116551$ID = rownames(LOC101116551)
+
+head(dat)
+
+head(metaData)
+merge1 = merge(LOC105603087,metaData, by = "ID")
+merge2= merge(NME4, metaData, by = "ID")
+merge3 = merge(PLXNB3, metaData, by ="ID")
+merge4 = merge(MARCHF3, metaData, by ="ID")
+merge5 = merge(LOC132657460, metaData, by = "ID")
+merge6 = merge(LOC121819234, metaData, by = "ID")
+merge7 = merge(LOC101116551, metaData, by = "ID")
+
+# Another method to plot gene counts with increasing methane production
+
+ggplotRegression <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[1], y = names(fit$model)[2])) + 
+  xlab("scaled methane production(g/d)") +
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+
+fit1 <- lm(scaled_CH4production ~ LOC105603087, data = merge1)
+p1=ggplotRegression(fit1) + ylab("Normalized LOC105603087 counts")
+genecounts_1 = file.path(out_dir, "LOC105603087_genecounts_slope.pdf")
+ggsave(filename = genecounts_1, plot = p1)
+
+fit2 <- lm(scaled_CH4production ~ NME4, data = merge2)
+p2=ggplotRegression(fit2) + ylab("Normalized NME4 counts")
+genecounts_2 = file.path(out_dir, "NME4_genecounts_slope.pdf")
+ggsave(filename = genecounts_2, plot = p2)
+
+fit3 <- lm(scaled_CH4production ~ PLXNB3, data = merge3)
+p3=ggplotRegression(fit3) + ylab("Normalized PLXNB3 counts")
+genecounts_3 = file.path(out_dir, "PLXNB3_genecounts_slope.pdf")
+ggsave(filename = genecounts_3, plot = p3)
+
+fit4 <- lm(scaled_CH4production ~ MARCHF3, data = merge4)
+p4=ggplotRegression(fit4) + ylab("Normalized MARCHF3 counts")
+genecounts_4 = file.path(out_dir, "MARCHF3_genecounts_slope.pdf")
+ggsave(filename = genecounts_4, plot = p4)
+
+fit5 <- lm(scaled_CH4production ~ LOC132657460, data = merge5)
+p5=ggplotRegression(fit5) + ylab("Normalized LOC132657460 counts")
+genecounts_5 = file.path(out_dir, "LOC132657460_genecounts_slope.pdf")
+ggsave(filename = genecounts_5, plot = p5)
+
+fit6 <- lm(scaled_CH4production ~ LOC121819234, data = merge6)
+p6=ggplotRegression(fit6) + ylab("Normalized LOC121819234 counts")
+genecounts_6 = file.path(out_dir, "LOC121819234_genecounts_slope.pdf")
+ggsave(filename = genecounts_6, plot = p6)
+
+fit7 <- lm(scaled_CH4production ~ LOC101116551, data = merge7)
+p7=ggplotRegression(fit7)+ ylab("Normalized LOC101116551 counts")
+genecounts_7 = file.path(out_dir, "LOC101116551_genecounts_slope.pdf")
+ggsave(filename = genecounts_7, plot = p7)
+
+# Plotting gene counts against treatments to see if gene xpression increased or decreased
+# I reorder the groups order : I change the order of the factor metaData$Treatment
+siggenes = rownames(resSig)
+dds$Treatment <- factor(dds$Treatment, levels=c("Control", "Low", "Medium", "High"))
+for ( i in 1: length(siggenes)){
+  plot=plotCounts(dds, gene = i, intgroup = "Treatment", returnData = TRUE)
+    print(ggboxplot(plot, x="Treatment", y="count", add="jitter", fill = "Treatment")+
+           xlab("microalgae oil intake levels")+ ylab(siggenes[i]))
+}
+
+# Basic line plot with points between gene expression and microalgae oil intake (actual)
+
+ggplotRegression_MO <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[1], y = names(fit$model)[2])) + 
+  xlab("Average daily microalgae oil intake") +
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+MOfit1 <- lm(Ave_MO ~ LOC105603087, data = merge1)
+MO_p1=ggplotRegression_MO(MOfit1) + ylab("Normalized LOC105603087 counts")
+MO_genecounts_1 = file.path(out_dir, "LOC105603087_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_1, plot = MO_p1)
+
+MOfit2 <- lm(Ave_MO ~ NME4, data = merge2)
+MO_p2=ggplotRegression_MO(MOfit2) + ylab("Normalized NME4 counts")
+MO_genecounts_2 = file.path(out_dir, "NME4_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_2, plot = MO_p2)
+
+MOfit3 <- lm(Ave_MO ~ PLXNB3, data = merge3)
+MO_p3=ggplotRegression_MO(MOfit3) + ylab("Normalized PLXNB3 counts")
+MO_genecounts_3 = file.path(out_dir, "PLXNB3_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_3, plot = MO_p3)
+
+MOfit4 <- lm(Ave_MO ~ MARCHF3, data = merge4)
+MO_p4=ggplotRegression_MO(MOfit4) + ylab("Normalized MARCHF3 counts")
+MO_genecounts_4 = file.path(out_dir, "MARCHF3_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_4, plot = MO_p4)
+
+MOfit5 <- lm(Ave_MO ~ LOC132657460, data = merge5)
+MO_p5=ggplotRegression_MO(MOfit5) + ylab("Normalized LOC132657460 counts")
+MO_genecounts_5 = file.path(out_dir, "LOC132657460_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_5, plot = MO_p5)
+
+MOfit6 <- lm(Ave_MO ~ LOC121819234, data = merge6)
+MO_p6=ggplotRegression_MO(MOfit6) + ylab("Normalized LOC121819234 counts")
+MO_genecounts_6 = file.path(out_dir, "LOC121819234_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_6, plot = MO_p6)
+
+MOfit7 <- lm(Ave_MO ~ LOC101116551, data = merge7)
+MO_p7=ggplotRegression_MO(MOfit7) + ylab("Normalized LOC101116551 counts")
+MO_genecounts_7 = file.path(out_dir, "LOC101116551_genecounts_slope_with_MO.pdf")
+ggsave(filename = MO_genecounts_7, plot = MO_p7)
+
+
+
+# g1 = ggplot(data=merge1, aes(x=Ave_MO, y=LOC105603087)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "LOC105603087 gene counts")+
+#     theme_minimal()
+# lineplot1 = file.path(out_dir, "LOC105603087_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot1, plot = g1)
+# 
+# 
+# g2=ggplot(data=merge2, aes(x=Ave_MO, y=NME4)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "NME4 gene counts")+
+#     theme_minimal()
+# lineplot2 = file.path(out_dir, "NME4_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot2, plot = g2)
+# 
+# 
+# g3=ggplot(data=merge3, aes(x=Ave_MO, y=PLXNB3)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "PLXNB3 gene counts")+
+#     theme_minimal()
+# lineplot3 = file.path(out_dir, "PLXNB3_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot3, plot = g3)
+# 
+# 
+# 
+# g4=ggplot(data=merge4, aes(x=Ave_MO, y=MARCHF3)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "MARCHF3 gene counts")+
+#     theme_minimal()
+# lineplot4 = file.path(out_dir, "MARCHF3_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot4, plot = g4)
+# 
+# 
+# g5=ggplot(data=merge5, aes(x=Ave_MO, y=LOC132657460)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "LOC132657460 gene counts")+
+#     theme_minimal()
+# lineplot5 = file.path(out_dir, "LOC132657460_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot5, plot = g5)
+# 
+# g6=ggplot(data=merge6, aes(x=Ave_MO, y=LOC121819234)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "LOC121819234 gene counts")+
+#     theme_minimal()
+# lineplot6 = file.path(out_dir, "LOC121819234_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot6, plot = g6)
+# 
+# 
+# g7=ggplot(data=merge7, aes(x=Ave_MO, y=LOC101116551)) +
+#   geom_line()+
+#   geom_point()+
+#   labs(title="Gene expression changes with increasing levels of microalgae oil (actual intake levels)",x="Average daily microalgae intake", y = "LOC101116551 gene counts")+
+#     theme_minimal()
+# lineplot7 = file.path(out_dir, "LOC101116551_genecounts_with_MO.pdf")
+# ggsave(filename = lineplot7, plot = g7)
+
+```
+
+
+
+
+```{r save_res}
+
+res <- as.data.frame(res)
+head(res)
+dim(res)
+
+total_columns <- nrow(res)
+total_columns
+
+data_file1 = file.path(out_dir, "DESeq2_Data_Filtering_70_percent_allGenes_with_pvalues_and_log2fc.csv")
+write.csv(res,file = data_file1, row.names=T)
+
+
+# filter genes from res based on p-value (1/17316 = 5.775005775005775e-5)
+filter1 = 1/total_columns
+
+res_filt_1 <- res %>% filter(pvalue < filter1)
+dim(res_filt_1)
+
+data_file2 = file.path(out_dir, "DESeq2_Pval_Filtering_70_percent_genes_with_p_lt_1_percent.csv")
+write.csv(res_filt_1,data_file2, row.names=T)
+
+# filter genes from res based on p-value (5/17316 = 2.887502887502888e-4)
+
+filter2 = 5/total_columns
+res_filt_2 <- res %>% filter(pvalue < filter2)
+dim(res_filt_2)
+
+data_file3 = file.path(out_dir, "DESeq2_Pval_Filtering_70_percent_genes_with_p_lt5_percent.csv")
+write.csv(res_filt_2,data_file3, row.names=T)
+
+# filter genes from res based only p-value (P-value < 0.05)
+res_filt_3 <- res %>% filter(pvalue < 0.05)
+dim(res_filt_3)
+
+data_file4 = file.path(out_dir, "DESeq2_Pval_FilteringApproach3_genes_with_p_lt_0.05.csv")
+write.csv(res_filt_3,data_file4, row.names=T)
+
+# filter genes from res based only p-adj-value (P-adj < 0.05)
+res_filt_4 <- res %>% filter(padj < 0.05)
+dim(res_filt_4)
+
+data_file5 = file.path(out_dir, "DESeq2_Pval_FilteringApproach4_genes_with_p.adj_lt_0.05.csv")
+write.csv(res_filt_4,data_file5, row.names=T)
+
+```
+##### Normalization
+
+```{r normalize}
+
+# Normalize and transform the data in the `DESeqDataSet` object using the `vst()`
+# function from the `DESEq2` R package
+dds_norm <- vst(deseq2Data)
+
+
+# Retrieve the normalized data from the `DESeqDataSet`
+vst_df <- assay(dds_norm) %>%
+  as.data.frame() %>% # Make into a data frame
+  tibble::rownames_to_column("GeneID") # Make Gene IDs into their own column
+
+#head(vst_df)
+```
+
+##### **Visualization of the genes**
+
+```{r}
+
+# 1. MA plot
+# shrinkage of LFC is importnt for visualization
+
+resultsNames(deseq2Data)
+resLFC <- lfcShrink(deseq2Data, coef="scaled_CH4production", type="apeglm")
+
+
+# dev.set(dev.next()). Run this if dev.off() does not works
+
+maplot = file.path(out_dir, "MA-Plot.pdf")
+p2 = plotMA(resLFC,main = "MA plot", alpha=0.05,colNonSig = "black", colSig = "red")
+ggsave(filename = maplot, plot = p2)
+
+
+
+# 2. Volcano plot
+# change the pvalue and fccutoffs as you wish (lines 124 and 125)
+
+volplot = file.path(out_dir, "Volcano-Plot.pdf")
+p3 = EnhancedVolcano(res,
+                lab=rownames(res),
+                x='log2FoldChange',
+                y='padj',
+                ylim=c(0,3),
+                xlim=c(-4,3),
+                title='Volcano plot',
+                caption = 'Log2FoldChange cutoff, 0.584; p-value cutoff, 0.05',
+                pCutoff=0.05,
+                FCcutoff=0.584,
+                pointSize = 4.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                legendPosition = 'right',
+                legendLabSize = 10,
+                legendIconSize = 3.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.75)
+ggsave(filename = volplot, plot = p3)
+
+volplot = file.path(out_dir, "Volcano-Plot-Methane.pdf")
+p3 = EnhancedVolcano(res,
+                lab=rownames(res),
+                xlab = bquote(~Log[2]~ 'fold change'),
+                x='log2FoldChange',
+                y='padj',
+                ylim=c(0,3),
+                xlim=c(-4,3),
+                subtitle='Genes associated with methane production (g/day)',
+                caption = 'Log2FoldChange cutoff, 0.584; p-value cutoff, 0.05',
+                pCutoff=0.05,
+                FCcutoff=0.584,
+                pointSize = 4.0,
+                labSize = 5.0,
+                labCol = 'black',
+                labFace = 'bold',
+                boxedLabels = TRUE,
+                colAlpha = 4/5,
+                legendPosition = 'right',
+                legendLabSize = 10,
+                legendIconSize = 3.0,
+                drawConnectors = TRUE,
+                widthConnectors = 1.0,
+                colConnectors = 'black'
+                )
+ggsave(filename = volplot, plot = p3)
+
+
+# 3. PCA based on methane production values
+
+### Transform counts for data visualization
+rld <- rlog(deseq2Data, blind=TRUE)#blind=TRUE argument results in a transformation unbiased to sample condition information.
+### Plot PCA 
+plotPCA(rld, intgroup="Treatment", ntop=1000)
+
+rld_mat <- assay(rld)
+pca <- prcomp(t(rld_mat))
+
+ # Create data frame with metadata and PC3 and PC4 values for input to ggplot
+df <- cbind(metaData, pca$x)
+ggplot(df) + geom_point(aes(x=PC1, y=PC3, color = Treatment))
+
+### Compute pairwise correlation values
+rld_cor <- cor(rld_mat)    ## cor() is a base R function
+
+head(rld_cor) 
+
+### Plot heatmap
+pheatmap(rld_cor)
+
+# for(i in 3:length(results)){
+#   print(results[i])
+#   
+# }
+# z=plotPCA(dds_norm, intgroup = c("scaled_CH4production"))
+# z + geom_label(aes(label = colnames(dds_norm)))
+```
+
+
+```{r hierarchical clustering on PCs}
+
+library(factoextra)
+library(FactoMineR)
+
+data_20lambs = read.csv("20Samples_metadata_6976_removed.csv")
+dim(data_20lambs)
+
+# Compute PCA 
+res.pca <- PCA(data_20lambs[,4:6], graph=TRUE)
+#res.pca <- PCA(data_20lambs$CH4production, graph=FALSE)
+
+# Clustering, auto nb of clusters: -1: the tree is automatically cut at the suggested level
+hc <- HCPC(res.pca, nb.clust=-1)
+
+fviz_dend(hc, 
+          cex = 0.7,                     # Label size
+          palette = "jco",               # Color palette see ?ggpubr::ggpar
+          rect = TRUE, rect_fill = TRUE, # Add rectangle around groups
+          rect_border = "jco",           # Rectangle color
+          labels_track_height = 0.8      # Augment the room for labels
+          )
+
+fviz_cluster(hc,
+             repel = TRUE,            # Avoid label overlapping
+             show.clust.cent = TRUE, # Show cluster centers
+             palette = "jco",         # Color palette see ?ggpubr::ggpar
+             ggtheme = theme_minimal(),
+             main = "Factor map"
+             )
+
+# Principal components + tree
+plot(hc, choice = "3D.map")
+
+#To display quantitative variables that describe the most each cluster, type this:
+hc$desc.var$quanti
+
+#to show principal dimensions that are the most associated with clusters, type this:
+hc$desc.axes$quanti
+
+# representative individuals of each cluster can be extracted as follow:
+hc$desc.ind$para
+
+
+################## Another method
+
+head(data_20lambs)
+# scaling values
+data.z <- scale(data_20lambs[ , 4])
+data.agg <- aggregate(data.z, list(data_20lambs$Treatment), mean)
+data.agg
+
+# distance between the means
+data.gdist <- dist(data.agg[, -1])
+data.gdist
+
+# cluster analysis and dendrogram
+data.hcl <- hclust(data.gdist, members=table(data_20lambs$Treatment))
+plot(data.hcl, labels=data.agg$Group.1)
+
+# dendrogram for all numeric variables
+data.dst <- dist(data.z) # distance matrix
+data.all.hcl <- hclust(data.dst, method = "complete")
+plot(data.all.hcl, labels=data_20lambs$LambID)
+rect.hclust(data.all.hcl, 3)
+```
+```{r pca-kmeans cluster}
+xxx.pca1<-prcomp(data_20lambs[,4:6], center=FALSE, scale.=FALSE)
+summary(xxx.pca1) 
+
+# visusalisation of quality
+fviz_eig(xxx.pca1)  # eigenvalues on y-axis
+
+xxx.pca1<-prcomp(data_20lambs[,4:6], center=FALSE, scale.=FALSE, rank. = 4) # stats::
+results <- xxx.pca1$x
+fviz_nbclust(results, FUNcluster=kmeans, k.max = 8) #Silhouette Statistic is the highest for 2 clusters.
+
+fviz_nbclust(results, FUNcluster=kmeans, method="gap_stat", k.max = 8)+ theme_classic()
+
+km1<-eclust(results, "kmeans", hc_metric="eucliden",k=2,graph = TRUE)
+km1
+
+```
+
+
+```{r annotationdb}
+
+#extract annotation DB of sheep
+
+ah <- AnnotationHub()
+AnnotationHub::query(ah, c("Ovis", "aries"))
+Oaries <- ah[["AH114633"]] # old one which worked with Biocversion 3.18
+#Oaries <- ah[["AH116933"]]
+columns(Oaries)
+
+```
+
+
+##### ** GSEA- Gene set enrichment analysis**
+
+```{r gsea}
+# Store the res variable to another variable for temporary use
+res_original = res
+
+rownames(res) <- stringr::str_remove(rownames(res), "LOC") 
+
+# we want the log2 fold change 
+original_gene_list <- res$log2FoldChange
+# name the vector
+names(original_gene_list) <- rownames(res)
+# omit any NA values 
+gene_list<-na.omit(original_gene_list)
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+gse <- gseGO(geneList=gene_list, 
+             ont ="ALL", 
+             keyType = "ENTREZID",
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = Oaries, 
+             pAdjustMethod = "BH")
+
+as.data.frame(gse)
+
+gse_df = file.path(out_dir, "GSEA_GO_enrichments.csv")
+write.csv(as.data.frame(gse),gse_df, row.names=T)
+
+# Most positive gene sets with highest NES
+as.data.frame(gse) %>%
+  # This returns the 3 rows with the largest NES values
+  dplyr::slice_max(NES, n = 3)
+
+```
+
+```{r gsea_plots}
+
+dplot = file.path(out_dir, "GSEA-Dot-Plot-GO.pdf")
+p4 = dotplot(gse)
+ggsave(filename = dplot, plot = p4)
+
+eplot = file.path(out_dir, "GSEA-Emap-Plot-GO.pdf")
+p5 = emapplot(pairwise_termsim(gse), showCategory = 10)
+ggsave(filename = eplot, plot = p5)
+
+rplot = file.path(out_dir, "GSEA-Ridge-Plot-GO.pdf")
+p6 = ridgeplot(gse) + labs(x = "enrichment distribution")
+ggsave(filename = rplot, plot = p6)
+
+
+gseaplot(gse, by = "all", title = gse$Description[1], geneSetID = 1)
+
+
+for (i in 1:length(gse$Description)) {
+    #pdf(paste0("C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/DEG/Methane_production/DGE_results/",i,".gsea-GO.#pdf"),height=5,width=7.5)
+    gsea_plot <- gseaplot(gse, geneSetID = i, title = gse$Description[i])
+    print(gsea_plot)
+    #dev.off()
+}
+
+for (i in 1:length(gse$Description)) {
+    pdf(paste0(out_dir,i,".GSEA-GO.pdf"),height=7,width=7.5)
+    gsea_go_plot <- gseaplot(gse, geneSetID = i, title = gse$Description[i])
+    print(gsea_go_plot)
+    dev.off()
+}
+```
+
+```{r gsea_kegg}
+# KEGG enrichment
+
+set.seed(123)
+kk2 <- gseKEGG(geneList     = gene_list,
+               organism     = "oas",
+               pvalueCutoff = 0.05,
+               pAdjustMethod = "BH")
+
+as.data.frame(kk2)
+
+gse_kegg_df = file.path(out_dir, "GSEA_KEGG_enrichments.csv")
+write.csv(as.data.frame(kk2),gse_kegg_df, row.names=T)
+
+# Most positive gene sets with highest NES
+as.data.frame(kk2) %>%
+  # This returns the 3 rows with the largest NES values
+  dplyr::slice_max(NES, n = 3)
+
+# Most negative NES
+as.data.frame(kk2) %>%
+  # Return the 3 rows with the smallest (most negative) NES values
+  dplyr::slice_min(NES, n = 3)
+```
+
+```{r gsea_kegg_plots}
+kdplot = file.path(out_dir, "GSEA-Dot-Plot-KEGG.pdf")
+p8 = dotplot(kk2, title = "Enriched Pathways", showCategory = 10)
+ggsave(filename= kdplot, plot = p8)
+
+keplot = file.path(out_dir, "GSEA-Emap-Plot-KEGG.pdf")
+p9 = emapplot(pairwise_termsim(kk2))
+ggsave(filename = keplot, plot = p9)
+
+kcplot = file.path(out_dir, "GSEA-Cnet-Plot-KEGG.pdf")
+p10 = cnetplot(kk2, categorySize="pvalue", foldChange=gene_list)
+ggsave(filename=kcplot, plot = p10)
+
+krplot = file.path(out_dir, "GSEA-Ridge-Plot-KEGG.pdf")
+p11 = ridgeplot(kk2) + labs(x = "enrichment distribution")
+ggsave(filename = krplot, plot = p11)
+
+for (i in 1:length(kk2$Description)) {
+    pdf(paste0(out_dir,i,".GSEA-KEGG.pdf"),height=7,width=7.5)
+    gsea_plot <- gseaplot(kk2, geneSetID = i, title = kk2$Description[i])
+    print(gsea_plot)
+    dev.off()
+}
+
+```
+
+
+```{r GSEA-pathview}
+
+## Generate Pathview images
+
+# Retrieveing the pathway images
+pathwayids=kk2$ID   #make a vector of Pathway ids
+
+pathview_folder <- "GSEA-Pathview_output"
+dir.create(file.path(out_dir, pathview_folder), showWarnings = FALSE)
+
+
+# Loop through the KEGG pathway IDs and generate GraphViz Pathview images for each IDs
+for (kegg_id in pathwayids) {
+
+  # Run the Pathview function to generate pathway maps
+  pathview(
+    gene.data = gene_list, # Gene expression data
+    pathway.id = kegg_id, # KEGG pathway ID
+    species = "oas", # Organism (use "hsa" for human, "mmu" for mouse, etc.)
+    kegg.native = FALSE, # Use KEGG's native view for pathway images
+    same.layer = F,
+    cex = 0.4, text.width=8,
+    limit = list(gene=max(abs(gene_list)), cpd=1), # Set the limits for gene data coloring
+    pdf.size = c(15, 12)
+  )
+
+  # Move the generated files to the output folder
+  file.rename(from = paste0(kegg_id, ".png"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".png")))
+  file.rename(from = paste0(kegg_id, ".xml"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".xml")))
+  file.rename(from = paste0(kegg_id, ".pathview.pdf"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".pathview.pdf")))
+
+  # Print a message indicating where the files were saved
+  cat("Pathway images for", kegg_id, "saved in:", pathview_folder, "\n")
+
+}
+
+# Generate Kegg Native graphs
+# Loop through the KEGG pathway IDs and generate GraphViz Pathview images for each IDs
+for (kegg_id in pathwayids) {
+
+  # Run the Pathview function to generate pathway maps
+  pathview(
+    gene.data = gene_list, # Gene expression data
+    pathway.id = kegg_id, # KEGG pathway ID
+    species = "oas", # Organism (use "hsa" for human, "mmu" for mouse, etc.)
+    kegg.native = TRUE, # Use KEGG's native view for pathway images
+    same.layer = T,
+    split.group =T,
+    limit = list(gene=max(abs(gene_list)), cpd=1), # Set the limits for gene data coloring
+    pdf.size = c(5, 8)
+  )
+
+  # Move the generated files to the output folder
+  file.rename(from = paste0(kegg_id, ".png"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".png")))
+  file.rename(from = paste0(kegg_id, ".xml"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".xml")))
+  file.rename(from = paste0(kegg_id, ".pathview.pdf"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".pathview.pdf")))
+
+  # Print a message indicating where the files were saved
+  cat("Pathway images for", kegg_id, "saved in:", pathview_folder, "\n")
+
+}
+```
+
+##### ** Over representation analysis **
+
+## We need to convert the gene IDs from the res and resSig variables into corresponding ENTREZ and ENSEMBL IDs for running the enrichment analyses.
+
+
+```{r convert_ids}
+# 1. method 2 to retrieve entrez ids
+# Temporarily store the original res into another variable (maybe for later use)
+
+res_original = res
+resSig_original = resSig
+
+# check if the number of genes are correct or not
+dim(res)
+dim(resSig)
+
+
+# Taking the resSig variable from the above deseq2 as it has all the genes with corresponding pvalue and log2fc values
+
+resSig$GeneID = rownames(resSig)
+resSigEntrez <- AnnotationDbi::select(Oaries, keys =  rownames(resSig),
+                                  columns = c('ENTREZID','GENENAME'), keytype = 'SYMBOL') # Oaries is the annotation db created from the geneset_enrichment_analysis.R code
+
+head(resSigEntrez)
+
+# Now replace the NA values in entrezid column with the values from first column. 
+
+resSigEntrez$ENTREZID <- ifelse(is.na(resSigEntrez$ENTREZID), resSigEntrez$SYMBOL, resSigEntrez$ENTREZID)
+colnames(resSigEntrez) = c("GeneID", "ENTREZID")
+resSig_with_entrez = merge(as.data.frame(resSig), resSigEntrez, by = "GeneID") #All entrezIDs have been retrieved for the 36 genes with p<0.1 and lfc=0 threshold
+head(resSig_with_entrez)
+dim(resSig_with_entrez)
+
+
+# Extract entrezIDs for the res variable
+
+res_allgenes<-res
+res_allgenes$GeneID<-rownames(res)
+
+# removing "LOC" info
+res_allgenes$GeneID <- stringr::str_remove(res_allgenes$GeneID, "LOC")
+rownames(res_allgenes) = stringr::str_remove(rownames(res_allgenes), "LOC")
+
+res_allgenesEntrez <- AnnotationDbi::select(Oaries, keys =  res_allgenes$GeneID,
+                                            columns = c('ENTREZID','GENENAME'), keytype = 'SYMBOL')
+
+head(res_allgenesEntrez)
+dim(res_allgenesEntrez)
+
+# Now replace the NA values in entrezid column with the values from first column.
+
+res_allgenesEntrez$ENTREZID <- ifelse(is.na(res_allgenesEntrez$ENTREZID), res_allgenesEntrez$SYMBOL, res_allgenesEntrez$ENTREZID)
+colnames(res_allgenesEntrez) = c("GeneID", "ENTREZID")
+res_allgenes_with_entrez = merge(as.data.frame(res_allgenes), res_allgenesEntrez, by = "GeneID") #All entrezIDs have been retrieved for the DEGs
+dim(res_allgenes_with_entrez)
+
+```
+
+
+
+```{r ora}
+
+# we want the log2 fold change 
+original_gene_list <- res_allgenes_with_entrez$log2FoldChange
+# name the vector
+names(original_gene_list) <- res_allgenes_with_entrez$ENTREZID
+# omit any NA values 
+gene_list<-na.omit(original_gene_list)
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+
+# Exctract significant results (padj < 0.05)
+sig_genes_df = subset(res_allgenes_with_entrez, padj < 0.05)
+
+# From significant results, we want to filter on log2fold change
+genes <- sig_genes_df$log2FoldChange
+
+# Name the vector
+names(genes) <- sig_genes_df$ENTREZID
+
+# omit NA values
+genes <- na.omit(genes)
+
+# filter on min log2fold change (log2FoldChange > 2)
+genes <- names(genes)[abs(genes) > 0.584]
+length(genes)
+
+go_enrich <- enrichGO(gene = genes,
+                      universe = names(gene_list),
+                      OrgDb = Oaries, 
+                      keyType = 'ENTREZID',
+                      readable = T,
+                      ont = "ALL",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.10)
+
+as.data.frame(go_enrich)
+
+Ora_go_df = file.path(out_dir, "ORA_GO_enrichments.csv")
+write.csv(as.data.frame(go_enrich),Ora_go_df, row.names=T)
+
+```
+
+
+```{r ora_plots}
+
+upplot = file.path(out_dir, "ORA-UpsetPlot-GO.pdf")
+p13 = upsetplot(go_enrich)
+ggsave(filename = upplot, plot = p13)
+
+odotplot = file.path(out_dir, "ORA-DotPlot-GO.pdf")
+p14 = dotplot(go_enrich)
+ggsave(filename = odotplot, plot = p14)
+
+obplot = file.path(out_dir, "ORA-BarPlot-GO.pdf")
+p15 = barplot(go_enrich, 
+        showCategory = 10, 
+        title = "GO Biological Pathways",
+        font.size = 8)
+ggsave(filename = obplot, plot = p15)
+
+
+oemplot = file.path(out_dir, "ORA-EmapPlot-GO.pdf")
+p16 = emapplot(pairwise_termsim(go_enrich))
+ggsave(filename = oemplot, plot = p16)
+
+#ogoplot = file.path(out_dir, "ORA-GOPlot-GO.pdf")
+#p17 = goplot(go_enrich, showCategory = 10)
+#ggsave(filename = ogoplot, plot =p17)
+
+
+# categorySize can be either 'pvalue' or 'geneNum'
+ocnplot = file.path(out_dir, "ORA-CnetPlot-GO.pdf")
+p18 =  cnetplot(go_enrich, categorySize="pvalue", foldChange=gene_list)
+ggsave(filename = ocnplot, plot = p18)
+
+```
+
+
+```{r ora_kegg}
+# Exctract significant results from df2
+kegg_sig_genes_df = subset(resSig_with_entrez, padj < 0.05)
+# From significant results, we want to filter on log2fold change
+kegg_genes <- kegg_sig_genes_df$log2FoldChange
+# Name the vector with the CONVERTED ID!
+names(kegg_genes) <- kegg_sig_genes_df$ENTREZID
+# omit NA values
+kegg_genes <- na.omit(kegg_genes)
+
+# filter on log2fold change (PARAMETER)
+kegg_genes <- names(kegg_genes)[abs(kegg_genes) > 0.584]
+Sys.setenv(R_LIBCURL_SSL_REVOKE_BEST_EFFORT=TRUE)
+kegg_organism = "oas"
+kk <- enrichKEGG(gene=kegg_genes, universe=names(gene_list),organism=kegg_organism, pvalueCutoff = 0.05)
+
+as.data.frame(kk)
+
+Ora_kegg_df = file.path(out_dir, "ORA_KEGG_enrichments.csv")
+write.csv(as.data.frame(kk),Ora_kegg_df, row.names=T)
+```
+
+
+```{r ora_kegg_plots}
+
+kbplot = file.path(out_dir, "ORA-BarPlot-KEGG.pdf")
+p19 = barplot(kk, 
+        showCategory = 10, 
+        title = "Enriched Pathways",
+         font.size = 8)
+ggsave(filename = kbplot, plot = p19)
+
+kbarplot = file.path(out_dir, "ORA-DotPlot-KEGG.pdf")
+p20 = dotplot(kk, 
+        showCategory = 10, 
+        title = "Enriched Pathways",
+        font.size = 8)
+ggsave(filename = kbarplot, plot = p20)
+
+
+# categorySize can be either 'pvalue' or 'geneNum'
+kcnetplot = file.path(out_dir, "ORA-CnetPlot-KEGG.pdf")
+p21 = cnetplot(kk, categorySize="pvalue", foldChange=gene_list)
+ggsave(filename = kcnetplot, plot = p21)
+
+```
+
+
+```{r ORA_pathview}
+
+pathview_folder <- "ORA-Pathview_output"
+dir.create(file.path(out_dir, pathview_folder), showWarnings = FALSE)
+
+pathids = kk$ID
+
+# Loop through the KEGG pathway IDs and generate Pathview images for each
+for (kegg_id in pathids) {
+
+  # Run the Pathview function to generate pathway maps
+  pathview(
+    gene.data = gene_list, # Gene expression data
+    pathway.id = kegg_id, # KEGG pathway ID
+    species = "oas", # Organism (use "hsa" for human, "mmu" for mouse, etc.)
+    kegg.native = FALSE, # Use KEGG's native view for pathway images
+    same.layer = T,
+    split.group =T,
+    limit = list(gene=max(abs(gene_list)), cpd=1), # Set the limits for gene data coloring
+    pdf.size = c(12,12)
+  )
+
+  # Move the generated files to the output folder
+  file.rename(from = paste0(kegg_id, ".png"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".png")))
+  file.rename(from = paste0(kegg_id, ".xml"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".xml")))
+  file.rename(from = paste0(kegg_id, ".pathview.pdf"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".pathview.pdf")))
+
+  # Print a message indicating where the files were saved
+  cat("Pathway images for", kegg_id, "saved in:", pathview_folder, "\n")
+
+}
+
+# Graphviz pathway images
+for (kegg_id in pathids) {
+
+  # Run the Pathview function to generate pathway maps
+  pathview(
+    gene.data = gene_list, # Gene expression data
+    pathway.id = kegg_id, # KEGG pathway ID
+    species = "oas", # Organism (use "hsa" for human, "mmu" for mouse, etc.)
+    kegg.native = TRUE, # Use KEGG's native view for pathway images
+    same.layer = F,
+    split.group =T,
+    limit = list(gene=max(abs(gene_list)), cpd=1), # Set the limits for gene data coloring
+    pdf.size = c(6, 8)
+  )
+
+  # Move the generated files to the output folder
+  file.rename(from = paste0(kegg_id, ".png"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".png")))
+  file.rename(from = paste0(kegg_id, ".xml"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".xml")))
+  file.rename(from = paste0(kegg_id, ".pathview.pdf"), to = file.path(out_dir, pathview_folder, paste0(kegg_id, ".pathview.pdf")))
+
+  # Print a message indicating where the files were saved
+  cat("Pathway images for", kegg_id, "saved in:", pathview_folder, "\n")
+
+}
+
+```
+##### ** Gene-set variation analysis **
+## It is a technique for characterising pathways or signature summaries from a gene expression dataset. That is basically to study my samples for the enrichment of a pathway without relying on phenotypic information. For eg., to see how is this pathway or gene signature behaving in one sample? 
+## The steps in GSVA are :
+
+  1. Calculate cumulative density function for each gene
+  2. Rank each gene for every sample
+  3. Calculate GSVA score done using the Klimigrov random walk statistic
+
+
+```{r GSVA-Gene-set variation analysis}
+
+# Here we do GSVA for all genes in the counts matrix (Pathways)
+
+# Extract the gmt file for your organism
+sheep <- keggList("oas")
+
+#download the pathways
+oaspathway <- downloadPathways("oas")
+
+#retrieve gene sets for an organism from databases such as GO and KEGG:
+oas <- getGenesets(org = "oas", db = "kegg", cache = TRUE, return.type="list")
+
+#Parse and write the gene sets to a flat text file in GMT format for other pathway enrichment analysis programs (e.g., GSEA)
+
+writeGMT(oas, gmt.file = "C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/DEG/Methane_production/DGE_results/KEGG_oas_gmt")
+
+head(oas)
+
+# Normalize and transform the data in the `DESeqDataSet` object using the `vst()`
+# function from the `DESEq2` R package
+dds_norm <- vst(deseq2Data)
+
+# Retrieve the normalized data from the `DESeqDataSet`
+vst_df <- assay(dds_norm) %>%
+  as.data.frame() %>% # Make into a data frame
+  tibble::rownames_to_column("GeneID") # Make Gene IDs into their own column
+
+head(vst_df)
+
+# Generate a mapped data frame for the counts matrix where we have the entrez ids for all the genes
+keytypes(Oaries)
+
+# First let's create a mapped data frame we can join to the gene expression values
+mapped_df <- data.frame(
+  "entrez_id" = mapIds(
+    # Replace with annotation package for the organism relevant to your data
+    Oaries,
+    keys = vst_df$GeneID,
+    # Replace with the type of gene identifiers in your data
+    keytype = "SYMBOL",
+    # Replace with the type of gene identifiers you would like to map to
+    column = "ENTREZID",
+    # This will keep only the first mapped value for each Entrez ID
+    multiVals = "first"
+  )
+) %>%
+  # If a gene identifier doesn't map to a Entrez gene identifier,
+  # drop that from the data frame
+  dplyr::filter(!is.na(entrez_id)) %>%
+  # Make an `GeneID` column to store the row names
+  tibble::rownames_to_column("GeneID") %>%
+  # Now let's join the rest of the expression data
+  dplyr::inner_join(vst_df, by = c("GeneID" = "GeneID"))
+
+head(mapped_df)
+mapped_df$GeneID = NULL
+dim(mapped_df) #19702 genes mapped
+
+# how many duplicated entries
+sum(duplicated(mapped_df$entrez_id))
+
+# prep data for GSVA
+filtered_mapped_matrix <- mapped_df %>%
+  # We need to store our gene identifiers as row names
+  tibble::column_to_rownames("entrez_id") %>%
+  # Now we can convert our object into a matrix
+  as.matrix()
+
+head(filtered_mapped_matrix)
+
+# perform GSVA using Gaussian method, as log transformed data would have a gaussian distribution. If its normal RNASeq, then you should use poisson distribution.
+gsva_par <- gsvaParam(filtered_mapped_matrix, oas)
+gsva_scores <- gsva(gsva_par)
+dim(gsva_scores)
+                    
+plage_param = plageParam(filtered_mapped_matrix, oas)
+plage_scores <- gsva(plage_param)
+
+
+# Print 6 rows,
+head(gsva_scores[, 1:10])
+head(plage_scores[, 1:10])
+
+# write GSVA results to a file
+gsva_scores %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Kegg_pathway") %>%
+  readr::write_tsv(file.path(
+    out_dir,
+    "20Samples_gsva_results.tsv"
+  ))
+
+# write PLAGE results to a file
+plage_scores %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Kegg_pathway") %>%
+  readr::write_tsv(file.path(
+    out_dir,
+    "20Samples_gsva_PLAGE_results.tsv"
+  ))
+
+# Heatmap generation
+annot_df <- metaData %>%
+  # We need the sample IDs and the main column that contains the metadata info
+  dplyr::select(
+    ID,
+    CH4production
+  ) 
+
+
+# Print out the heatmap 
+pathwayplot = file.path(out_dir, "Pheatmap_GSVA.pdf")
+plot22 = pheatmap::pheatmap(gsva_scores,
+  annotation_col = annot_df, # Add metadata labels!
+  show_colnames = FALSE, # Don't show sample labels
+  fontsize_row = 1 # Shrink the pathway labels a tad
+)
+ggsave(filename = pathwayplot, plot = plot22)
+
+# Pathways that share same biology will cluster together.Pathways may cluster together, or have similar GSVA scores, because the genes in those pathways overlap.
+
+pathwayplot_plage = file.path(out_dir, "Pheatmap_GSVA_PLAGE.pdf")
+plot23 = pheatmap::pheatmap(plage_scores,
+  annotation_col = annot_df, # Add metadata labels!
+  show_colnames = TRUE, # Don't show sample labels
+  fontsize_row = 1 # Shrink the pathway labels a tad
+)
+ggsave(filename = pathwayplot_plage, plot = plot23)
+
+# we can look at how many genes are in common for two pathways.
+length(intersect(
+  oas$oas01232_Nucleotide_metabolism,
+  oas$oas01240_Biosynthesis_of_cofactors
+))
+
+length(intersect(
+  oas$oas00240_Pyrimidine_metabolism,
+  oas$oas01240_Biosynthesis_of_cofactors
+))
+
+length(intersect(
+  oas$oas00240_Pyrimidine_metabolism,
+  oas$oas00230_Purine_metabolism
+))
+
+length(oas$oas00240_Pyrimidine_metabolism)
+length(oas$oas00230_Purine_metabolism)
+length(oas$oas04360_Axon_guidance)
+length(oas$oas01240_Biosynthesis_of_cofactors)
+length(oas$oas00983_Drug_metabolism)
+length(oas$oas01100_Metabolic_pathways)
+length(oas$oas01232_Nucleotide_metabolism)
+
+
+# To open interactive page
+re <- igsva()
+
+
+goannot <- AnnotationDbi::select(Oaries, keys = mapped_df$entrez_id, columns="GO")
+head(goannot)
+
+
+```
+
+```{r GSVA-significant genes}
+
+head(resSig)
+
+sig = merge(vst_df, as.data.frame(resSig), by ="GeneID")
+sig_final = sig[c(1:21)]
+head(sig_final)
+
+# Generate a mapped data frame for the counts matrix where we have the entrez ids for all the genes
+keytypes(Oaries)
+
+# First let's create a mapped data frame we can join to the gene expression values
+mapped_df <- data.frame(
+  "entrez_id" = mapIds(
+    # Replace with annotation package for the organism relevant to your data
+    Oaries,
+    keys = sig_final$GeneID,
+    # Replace with the type of gene identifiers in your data
+    keytype = "SYMBOL",
+    # Replace with the type of gene identifiers you would like to map to
+    column = "ENTREZID",
+    # This will keep only the first mapped value for each Entrez ID
+    multiVals = "first"
+  )
+) %>%
+  # If a gene identifier doesn't map to a Entrez gene identifier,
+  # drop that from the data frame
+  dplyr::filter(!is.na(entrez_id)) %>%
+  # Make an `GeneID` column to store the row names
+  tibble::rownames_to_column("GeneID") %>%
+  # Now let's join the rest of the expression data
+  dplyr::inner_join(vst_df, by = c("GeneID" = "GeneID"))
+
+head(mapped_df)
+mapped_df$GeneID = NULL
+dim(mapped_df) #19702 genes mapped
+
+# how many duplicated entries
+sum(duplicated(mapped_df$entrez_id))
+
+# prep data for GSVA
+filtered_mapped_matrix <- mapped_df %>%
+  # We need to store our gene identifiers as row names
+  tibble::column_to_rownames("entrez_id") %>%
+  # Now we can convert our object into a matrix
+  as.matrix()
+
+head(filtered_mapped_matrix)
+
+# perform GSVA using Gaussian method, as log transformed data would have a gaussian distribution. If its normal RNASeq, then you should use poisson distribution.
+gsva_par <- gsvaParam(filtered_mapped_matrix, oas)
+gsva_scores <- gsva(gsva_par)
+            
+
+# Print 6 rows,
+head(gsva_scores[, 1:10])
+
+# write results to a file
+gsva_scores %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Kegg_pathway") %>%
+  readr::write_tsv(file.path(
+    out_dir,
+    "20Samples_gsva_results_sigGenes.tsv"
+  ))
+
+
+# Heatmap generation
+annot_df <- metaData %>%
+  # We need the sample IDs and the main column that contains the metadata info
+  dplyr::select(
+    ID,
+    CH4production
+  ) 
+
+
+# Print out the heatmap 
+pathwayplot = file.path(out_dir, "SigGenes_Pheatmap_GSVA.pdf")
+plot22 = pathway_heatmap <- pheatmap::pheatmap(gsva_scores,
+  annotation_col = annot_df, # Add metadata labels!
+  show_colnames = FALSE, # Don't show sample labels
+  fontsize_row = 5 # Shrink the pathway labels a tad
+)
+ggsave(filename = pathwayplot, plot = plot22)
+
+```
 
