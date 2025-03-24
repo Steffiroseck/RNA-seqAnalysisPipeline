@@ -1,202 +1,586 @@
 ---
-title: "DESeq2"
+title: "Differential gene expression analysis on lambs with divergent Methane production"
 author: "Steffimol Rose"
-date: "2024-05-21"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+knitr::opts_knit$set(root.dir = 'C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Data/20Samples_FinalUsedforAnalysis/')
+
 ```
-This code takes the counts data generated from featureCounts and the metadata with the phenotype information as the input files. So make sure you have both files in the correct directories. In this scenario, I have copied the metadata to the main working directory.
 
-```{r}
+```{r set_out_dir}
 
-# Load all the necessary libraries. If not installed, install using either:
-#install.packages("package") 
-# or
-# to install biconductor packages, 
-#if (!require("BiocManager", quietly = TRUE))
-#  install.packages("BiocManager")
-#BiocManager::install(version = "3.18")
-#BiocManager::install(c("clusterProfiler", "AnnotationHub"))
+out_dir = "C:/Users/afbi-roses/Steffi_sheep_transcriptomics/Output/Methane_2025/"
+if(!dir.exists(out_dir)){
+  dir.create(out_dir)
+}
 
-library(DESeq2)
+```
+
+```{r extract_data}
+#dplyr
 library(dplyr)
-library(tidyverse)
-#library(EnhancedVolcano)
+library(ggpubr)
+ 
+metaData <-read.csv("20Samples_metadata_6976_removed.csv",sep=",",header=T)
+head(metaData)
+
+rownames(metaData) <- metaData$ID
+metaData$ID <- factor(metaData$ID)
+
+# Look at the correlations between ADG and treatments
+
+metaData$Treatment <- as.character(metaData$Treatment)
+metaData$Treatment <- with(metaData,factor(Treatment,levels=unique(Treatment)))
+# I reorder the groups order : I change the order of the factor data$names
+metaData$Treatment <- factor(metaData$Treatment , levels=c("Control", "Low", "Medium", "High"))
+#pdf("Anova_boxplot_EDA_24Lambs.pdf")
+ggboxplot(metaData, x = "Treatment", y = "CH4production",
+          color = "Treatment", palette = "jco",
+          add="jitter", shape = "Treatment", labelOutliers = TRUE,
+  outlierColor = "red",xlab="Microalgae oil intake (g/kg dry matter)", ylab = "Methane production (g/day)")+
+  stat_compare_means(method = "anova", aes(label = paste0("ANOVA, p = ", ..p.format..)))
+#dev.off()
+
+# Plot of DMI against unadjusted microalgae oil intake (continuous)
+ggscatter(metaData, x = "Ave_MO", y = "CH4production", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Microalgae oil (g/kg)", ylab = "Methane production  (g/day)")
+
+# analysis of variance
+anova <- aov(CH4production ~ Treatment, data = metaData)
+summary(anova)
+
+# Tukey's test
+tukey <- TukeyHSD(anova)
+print(tukey)
 
 ```
-create a directory to store DESeq2 outputs. Since I am pre-filtering reads in coming steps, I am creating directories to keep stringent results (where pre-filtering is done), and relaxed ( where no pre-filtering applied).
 
 
-```{r}
-# set the working directory
 
-
-#system("mkdir 6.deseq2")
-
-# Read the raw count data generated from featureCounts
-countData<-read.csv("Z:/SHEEP_TRANSCRIPTOMICS/Vahid_data/21samples_aftertrimming_test.csv",sep=",", header=T, check.names=F)
-# run the below step if you want to remove any of the samples with poor mapping rates, as including this might induce noise in the deseq2 results
-#countData<-countData[ , !names(countData) %in% c("7085","7073")]# Remove 7085 and 7073 as they had poor mapping rates
-
-# Remove the .bam, control, low, medium and high from the column names
-colnames(countData)<-gsub(".bam","",colnames(countData))
-colnames(countData)<-gsub("Control","",colnames(countData))
-colnames(countData)<-gsub("Low","",colnames(countData))
-colnames(countData)<-gsub("Medium","",colnames(countData))
-colnames(countData)<-gsub("High","",colnames(countData))
-
+```{r load_data_for_deseq2, warning=FALSE}
+library(DESeq2)
+# Differential gene expression analyses
+metaData <-read.csv("20Samples_metadata_6976_removed.csv",sep=",",header=T)
+countData<-read.csv("20Samples_afterTrimming_6976removed_HISAT2.csv",sep=",", header=T, check.names=F)
 orig_names <- names(countData) # keep a back-up copy of the original names
-geneID <- countData[,1]# Convert count data to a matrix of appropriate form that DEseq2 can read
-countData <- as.matrix(countData[ , -1]) #removing first column geneID from the table
-# make sure the rownames are gene ids and first column onwards should be samples. any other columns should be removed.otherwise deseq2 will throw error.
+geneID <- countData[,1] # Convert count data to a matrix of appropriate form that DEseq2 can read
+countData <- as.matrix(countData[ , -1]) 
 sampleIndex <- colnames(countData)
 countData <- as.matrix(countData[,sampleIndex])
 rownames(countData) <- geneID
-head(countData)
+countData2<-countData
+# Calculate total number of columns
+total_columns <- ncol(countData2)
+zero_counts <- rowSums(countData2 == 0)
+length(zero_counts)
+table(zero_counts)
+# Filter rows where more than 70% are zero (zero_counts < 0.7 * total_columns = 14)
+countData2 <- as.data.frame(countData2) %>% dplyr::filter(zero_counts < 0.7 * total_columns)
+dim(countData2)
+#mycounts <- countData[rowSums(countData)>=10,]
+mycounts <- countData2
 
-# check library size (total mapped reads)
-colSums(countData[,2:ncol(countData)])
+
+rownames(metaData) <- metaData$ID 
+metaData$ID  <- factor(metaData$ID)
+# reorder counts columns based on row order of metadata (coldata)  
+countData2 <- countData2[, rownames(metaData)]
+all(rownames(metaData) == colnames(countData2))
+colnames(countData2) == metaData$ID 
+
+
+# visualise the distribution of counts using a boxplot and density plot.
+rafalib::mypar(1,2,mar=c(6,3,3,2))
+boxplot(log2(as.matrix(countData2)+1),ylab=expression('Log'[2]~'Read counts'),las=2,main="Raw data")
+hist(log2(as.matrix(countData2)+1),ylab="",las=2,main="Raw data")
+par(mfrow=c(1,1))
+# On the boxplot, the median values are 5 across all samples. This means that half the values in each sample are 5. On the histogram, we see a huge peak of zeros. This data set would benefit from a low count filtering.
+
+# # We can check if any samples need to be discarded based on the number of genes detected. We create a barplot of genes detected across samples. I chose 7 because I have 7 replicates in my group with least samples.
+# barplot(colSums(countData2>7),ylab="Number of detected genes",las=2)
+# abline(h=median(colSums(countData2>7))) 
+# # On average, about 17000 genes are detected. All samples are more or less close to the average. None of the samples look bad enough to be removed.
+# 
+# #Across genes
+# hist(rowSums(countData2>7)) 
+# # There are a lot of genes that are not expressed (ie; zero on x-axis) in any sample. Based on the histogram, almost 11000 genes have expression 0 (These can be removed completely) and around 15000 genes are expressed across all samples (peak on the right). We don’t want to be too stringent, so we will choose to keep genes that are expressed in at least 7 samples since our groups have 7 samples each (two groups had 9 each).
+# 
+# # Now filter these genes
+# # remove genes with low counts
+# keep_genes <- rowSums( countData > 5 ) >= 7
+# countData2 <- countData[keep_genes,]
+# dim(countData)
+# dim(countData2)
+# #13120 genes were removed
+# 
+# # Distribution of the filtered counts. Compare this to the previous boxplot above.
+# boxplot(log2(as.matrix(countData2)+1),ylab=expression('Log'[2]~'Read counts'),las=2,main="Filtered data")
+# 
+# # In addition, compare the histogram of filtered counts below to the raw data above.
+# 
+# hist(rowSums(countData2>7))
 ```
 
-```{r}
-# Read the metadata file
-metaData <-read.csv("Z:/SHEEP_TRANSCRIPTOMICS/Vahid_data/metadata_with_methaneinfoadded_metadata.csv",sep=",",header=T)
-rownames(metaData) <- metaData$ID
-metaData$ID <- factor(metaData$ID)
-rownames(metaData)<-gsub("[a-zA-Z ]", "", rownames(metaData))
-
-# Users should center and scale numeric variables in the design to improve GLM convergence if using numeric variables (recommended by deseq2 vignette)
-# add methane production values to new column
-#metaData$scaled_CH4production = metaData$CH4production
-#metaData$scaled_CH4production=scale(metaData$scaled_CH4production, center=TRUE)
-```
-
-Adjusting for the treatment effect and removing them to see how the result looks like:
-
-```{r}
-#metaData$CH4production_Adj<-scale(lm(CH4production~Treatment, data=metaData)$residual, center=TRUE)
-
-#plot(scale(lm(CH4production~Treatment, data=metaData)$residual))
-#plot(metaData$scaled_CH4production)
-#metaData$scaled_CH4production_Adj<-scale(lm(CH4production~Treatment, data=metaData)$residual)
-```
 
 
-```{r}
-# Put the columns of the count data in the same order as rows names of the sample mapping, then make sure it worked
-countData <- countData[,unique(rownames(metaData))]
-all(colnames(countData) == rownames(metaData))
+```{r deseq2_filtering_1}
+all.equal(colnames(countData2),rownames(metaData))
+metaData$scaled_CH4production=scale(metaData$CH4production, center=TRUE)
 
-# Users should center and scale numeric variables in the design to improve GLM convergence if using numeric variables (recommended by deseq2 vignette)
-metaData$CH4production=scale(metaData$CH4production, center=TRUE) 
+d1 <- DESeqDataSetFromMatrix(countData=countData2,colData=metaData,design=~scaled_CH4production)
+d1 <- DESeq2::estimateSizeFactors(d1,type="ratio")
+cd <- log2( counts(d1,normalized=TRUE) + 1 ) 
+saveRDS(cd, file = paste0(out_dir,"Raw_Methane_gene_counts_normalised_deseq2.Rds"))
+cd <- readRDS("../../Output/Methane_2025//Raw_Methane_gene_counts_normalised_deseq2.Rds")
+boxplot(cd,ylab=expression('Log'[2]~'Read counts'),las=2,main="DESeq2")
 
-deseq2Data <- DESeqDataSetFromMatrix(countData=countData, colData=metaData, design= ~CH4production)# we will get methane prd term for control and methane prod fro treatment
-
-# Stringent approach where we keep only rows that have at least 10 reads total
-keep <- rowSums(counts(deseq2Data)) >= 10
-deseq2Data <- deseq2Data[keep,] #23,252 remaining after trimming, 23239 before trimming
-dim(deseq2Data)
-
-deseq2Data <- DESeq(deseq2Data)
-dim(deseq2Data)
-
-norm_counts <- counts(deseq2Data, normalized = TRUE)
-readr::write_csv(as.data.frame(norm_counts), file="Z:/SHEEP_TRANSCRIPTOMICS/Vahid_data/STAR_norm_counts.csv")
-write.csv(as.data.frame(norm_counts), file="Z:/SHEEP_TRANSCRIPTOMICS/Vahid_data/STAR_norm_counts.csv", row.names=TRUE)
-```
-loop through results and extract significant DEGs for each model term.  specify the cut-offs for pval and lfc in the below variables.Make sure to change the filenames with the cutoff values before saving the deg file
-
-```{r}
+deseq2Data <- DESeq(d1)
+# extract significant genes based on Log2FC and adj.pvalue thresholds of your wish
 pval = 0.05
-lfc = 1
+lfc = 0.584
 results = resultsNames(deseq2Data)
 upresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"upDEGs"))
 downresultstable = matrix(nrow = length(results), ncol = 1, dimnames = list(results,"downDEGs"))
 
-for(i in 1:length(results)){
-
+for(i in 2:length(results)){
+  
   res = results(deseq2Data, 
-                name = results[i])
+                name = results[i])# independent filtering occurs in this step to save you from multiple test correction on genes with no power
   resorder <- res[order(res$padj),]
   upDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange > lfc))))
   downDEGs = (length(na.omit(which(res$padj<pval & res$log2FoldChange < -lfc))))
   resSig = subset(resorder, padj < pval & log2FoldChange > lfc | padj < pval & log2FoldChange < -lfc)
-  readr::write_csv(as.data.frame(resSig), file=paste0(results[i],".0.05P.0.584LFC.updownDEGs_afterTrimmingsamples_HISAT2.csv"))
+  write.csv(resSig , file=paste0(out_dir,results[i],"_updownDEGs.csv"), row.names = T)
+  resSig_0.05 = subset(resorder, padj < pval & log2FoldChange > 0 | padj < pval & log2FoldChange < 0)
+  write.csv(resSig_0.05 , file=paste0(out_dir,results[i],"_updownDEGs_LFC_greaterthan_Zero.csv"), row.names = T)
+  res_pval = subset(resorder, padj < pval )
   upresultstable[results[i],"upDEGs"] = upDEGs
   downresultstable[results[i],"downDEGs"] = downDEGs 
 }
 
-upDEGs
-downDEGs
-resSig
-
-out <- as.data.frame(res) %>% dplyr::filter(rownames(res) %in% c("NME4" ,"LOC101102105", "LOC101120628"))
-
-```
-
-fold change = 0.5, Log2FC= -1 (2 fold decrease)
-fc = 1.4, log2fc = 0.5 (1.5 times higher expression)
-log2fc =0 means no change
-
-```{r}
-resOrdered <- res[order(res$pvalue),]
-write.csv(as.data.frame(resOrdered),file="TreatmentEffect_afterTrimming_deseq2_allresults.csv")
-```
-These next R scripts are for a variety of visualization, QC and other plots to  get a sense of what the RNAseq data looks like based on DESEq2 analysis
-
-```{r}
-# 1) MA plot
-# 2) PCA plot
-# 3) Volcano plot
-#
- 
-# 1. MA plot
-# shrinkage of LFC is importnt for visualization
-resultsNames(deseq2Data)
-resLFC <- lfcShrink(deseq2Data, coef="CH4production", type="apeglm")
-resLFC
-pdf("6.deseq2/MAplot.pdf")
-plotMA(resLFC,main = "MA plot", alpha=0.05,colNonSig = "black", colSig = "red")
-dev.off()
-
-# 2. Volcano plot
-# change the pvalue and fccutoffs as you wish (lines 124 and 125)
-pdf("6.deseq2/EnhancedVolcano.pdf", width=14, height=9)
-EnhancedVolcano(res,
-	lab=rownames(res),
-	x='log2FoldChange',
-	y='padj',
-	title='Volcano plot',
-	caption = 'FC cutoff, 0.584; p-value cutoff, 0.05',
-	pCutoff=0.05,
-	FCcutoff=0.584,
-	pointSize = 5.0,
-	labSize=5,legendPosition = 'top',legendLabSize = 12)
-dev.off()
-
-##labSize=2,legendPosition = 'top',legendLabSize = 12 for volcanoplot if need to add gene names
-
-# Extract the rawcounts for these significant genes (for WGCNA)
-#required_df <- countData[rownames(countData) %in% rownames(resSig1),]
-# or extract log2fc values for genes in yellowgreen module
-required_df1 <- res[rownames(res) %in% rownames(yellowgreen),]
-#write.table(as.data.frame(required_df), '6.deseq2/Control.vs.High.sig.genes.raw.counts.csv',quote=F, row.names=TRUE)
+summary(res, alpha=0.05)
+#as.data.frame(resSig)
+dim(resSig)
+# 40 genes significant
 
 ```
 
-```{r}
-hisat2 = c(0,52)
-star = c(0,43)
-genes <- c("LOC101102105","NME4")
-df<-data.frame(hisat2,star,row.names = genes)
+**Check how many of these significant genes are actually different due to different treatments**
+
+```{r extract_sig_gene_exp_with_treatments, figures-side, fig.show="hold", out.width="30%"}
+
+# get the genes with significant  expression differences between different treatments
+# Load necessary libraries 
+library(dplyr)
+library(broom)
+library(reshape2)
+
+# get the normalized counts from deseq2
+dds <- estimateSizeFactors(deseq2Data)
+norma <- counts(dds, normalized=TRUE)
+# save significant genes from deseq2 into another list
+sig_gene_list <- rownames(resSig) 
+length(sig_gene_list)
+# extract normalized counts for the significant genes
+selected_counts <- norma[rownames(norma) %in% sig_gene_list, ]
+# transpose and print the results as we want the gene names as columns and samples as rownames. Then save the transposed file into another variable for further analysis.
+#print(t(selected_counts)) 
+resSig_normalized_counts <- as.data.frame(t(selected_counts))
+resSig_normalized_counts$ID <- rownames(resSig_normalized_counts)
+MergedDF = merge(resSig_normalized_counts, metaData, by ="ID")
+
+# ensure Treatment column is a factor
+MergedDF$Treatment <- as.factor(MergedDF$Treatment)
+
+# Initialize an empty results table
+result_table <- data.frame(
+  gene = colnames(MergedDF)[2:8],#number of columns with gene names
+  p_value = numeric(7),
+  significant = logical(7)
+)
+
+# Loop through each gene and perform test
+for (i in 2:8){
+  gene_name <- colnames(MergedDF)[i]
+   # Skip if the gene has missing or constant values
+  if (any(is.na(MergedDF[, i]))) {
+    warning(paste("Skipping gene", gene_name, "due to missing values"))
+    next
+  }
+  if (length(unique(MergedDF[, i])) == 1) {
+    warning(paste("Skipping gene", gene_name, "due to constant values"))
+    next
+  }
+  
+  #perform t-test (or ANOVA..)
+  test_result <- aov(MergedDF[,i] ~ MergedDF[,9]) # test for treatment groups. treatment is in column 123
+  # store p-value in results table
+  result_table$p_value[i-1] <- summary(test_result)[[1]][["Pr(>F)"]][1]
+}
+
+# Determine significance
+result_table$significant <- result_table$p_value < 0.05
+# Adjust p-values for multiple testing
+result_table$p_adj <- p.adjust(result_table$p_value, method  = "BH")
+print(result_table)
+# count number of significant genes
+significant_count <- sum(result_table$significant)
+cat("Number of significant genes with different treatment conditions:", significant_count, "\n")
+# write result to a file
+write.csv(result_table, file = paste0(out_dir, "Methane_genes_with_significant_differences_with_treatments.csv"), row.names= FALSE)
+table(result_table$significant)
+
+#extract the genes that does not have sig effect with treatments
+sig_genes <- result_table[which(result_table$p_adj == FALSE), ]
+dim(sig_genes)
+norm_count_sig_genes <- counts(deseq2Data, normalized = TRUE)
+selected_gene_counts <- norm_count_sig_genes[rownames(norm_count_sig_genes) %in%  sig_genes$gene, ]
+write.csv(selected_gene_counts, file =paste0(out_dir, "6genes_with_no_MO_effects.csv"))
+
+######################################################################################################################### Check significance of these DEGs with DMI
+######################################################################################################################
+
+# Loop through each gene and perform test
+# visualize Ave_MO against gene expression to see if they are significantly correlated or not
+# Loop through significant genes and plot
+# convert norm counts to long format
+
+library(ggpubr)
+df_long <- melt(as.data.frame(selected_gene_counts), variable.name = "ID", value.name ="expression")
+df_long$gene <- rep(rownames(selected_gene_counts), times = ncol(selected_gene_counts))
+# merge exp data with phenotype
+df_merged <- merge(df_long, metaData, by = "ID")
+# extract unique genes
+unique_genes <- unique(df_merged$gene)
+for (i in unique_genes) {
+  gene_data <- subset(df_merged, gene == i)
+  
+  p<-ggscatter(gene_data, x = "CH4production", y = "expression", add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman") +
+    labs(title = paste("Scatter Plot for", i),
+         x = "CH4production",
+         y = "Normalized Gene Expression counts")
+  print(p)
+  # Save plot
+  #ggsave(filename = file.path(out_dir, paste0(i, "_scatterplot.png")), plot = p, width = 6, height = 4)
+}
+
+```
 
 
-library(ggplot2)
-ggplot(df, aes(x = star, y = hisat2))+
-  geom_point()+
-  geom_label(aes(label = rownames(df)))
+```{r visualization_of_sig_genes, fig.height= 8, fig.width=10}
+#convert to log scale for visualization
+log_sig_counts <- log2(selected_gene_counts + 1)
+
+# boxplot of gene expression distribution across all samples
+boxplot(as.data.frame(t(log_sig_counts)),
+        main = "Gene expression distribution of 54 differentially expressed genes with no microalgae oil effect",
+        ylab = "Log2 Normalized counts",
+        las = 2, col = "lightblue", font = 2)
+
+
+library(DESeq2)
+# run variance stabilizing transformation on counts
+vsd <- vst(deseq2Data)
+plotPCA(vsd, intgroup="CH4production")
+
+# Find top 500 genes with most variance
+# calculate the variance for each gene
+rv <- rowVars(assay(vsd))
+# Top n genes by variance to keep.
+ntop <- 500
+# select the ntop genes by variance
+select <- order(rv, decreasing=TRUE)[seq_len(min(ntop, length(rv)))]
+# perform a PCA on the data in assay(x) for the selected genes
+pca <- prcomp(t(assay(vsd)[select,]))
+# Loadings for the first two PCs.
+loadings <- pca$rotation[, seq_len(2)]
+
+
+# Another way to plot PCA
+library(PCAtools)
+p <- pca(assay(vsd), metadata = metaData, removeVar = 0.1)
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+biplot(p, showLoadings = TRUE,
+    labSize = 5, pointSize = 5, sizeLoadingsNames = 3)
+
+# plot eigen corplot to see which PCs contribute more to DMI variations
+eigencorplot(p,
+    metavars = c('CH4production', 'DMI_chamber', 'RFI', 'Initial_BW', 'Final_BW', 'Total_BWG','ADG_chamber',  'FE', 'FCR'))
+# It seems for DMI, PC3, PC7 and PC9 represents variation driven by DMI.
+
+
+# extract PC loadings
+loadings <- as.data.frame(p$loadings)
+#head(loadings)
+loadings$Gene <- rownames(loadings)
+loadings <- data.frame(loadings, rownames= loadings$Gene)
+loadings$Gene <- NULL
+
+man_genes_PC3 <- sort(abs(loadings[, "PC3"]), decreasing = TRUE)[1:50]
+top_gene_names_PC3 <- rownames(loadings)[order(abs(loadings[, "PC3"]), decreasing = TRUE)[1:50]]
+print(top_gene_names_PC3)
+
+# man_genes_PC7 <- sort(abs(loadings[, "PC7"]), decreasing = TRUE)[1:50]
+# top_gene_names_PC7 <- rownames(loadings)[order(abs(loadings[, "PC7"]), decreasing = TRUE)[1:50]]
+# print(top_gene_names_PC7)
+# 
+# man_genes_PC9 <- sort(abs(loadings[, "PC9"]), decreasing = TRUE)[1:50]
+# top_gene_names_PC9 <- rownames(loadings)[order(abs(loadings[, "PC9"]), decreasing = TRUE)[1:50]]
+# print(top_gene_names_PC9)
+# 
+# # save the results
+# write.table(top_gene_names_PC3, file=paste0(out_dir,"Top_50_genes_PC3.csv"), row.names = FALSE)
+# write.table(top_gene_names_PC7, file=paste0(out_dir,"Top_50_genes_PC7.csv"), row.names = FALSE)
+# write.table(top_gene_names_PC9, file=paste0(out_dir,"Top_50_genes_PC9.csv"), row.names = FALSE)
+
+
+# heatmap of 54 significant genes with no oil effect to observe the clustering pattern of significant genes
+library(pheatmap)
+pheat <- pheatmap(log_sig_counts,
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         show_rownames = TRUE,
+         fontsize_raw = 1,
+         main = "Heatmap of the 32 differentially expressed genes associated with DMI")
+print(pheat)
+ggsave(filename = file.path(out_dir, paste0("Heatmap_6_sig_DEGs.pdf")), plot = pheat, width = 8, height = 8)
+
+# heatmap of all 40 significant genes
+# we have already extracted normalized counts for those 119 genes saved in selected_counts variable
+#selected_counts
+#convert to log scale for visualization
+log_sig_counts_6 <- log2(selected_counts + 1)
+pheat_6 <- pheatmap(log_sig_counts_6,
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         show_rownames = TRUE,
+         fontsize_raw = 0.1,
+         main = "Heatmap of 7 differentially expressed genes associated with Methane production")
+print(pheat_6)
+ggsave(filename = file.path(out_dir, paste0("Heatmap_7_sig_DEGs.pdf")), plot = pheat_6, width = 10, height = 13)
+```
+
+
+```{r FUNCT_ANNOT_filtering_1, warning=FALSE}
+#extract annotation DB of sheep
+library(AnnotationHub)
+library(clusterProfiler)
+library(pathview)
+ah <- AnnotationHub()
+AnnotationHub::query(ah, c("Ovis", "aries"))
+Oaries <- ah[["AH114633"]] # old one which worked with Biocversion 3.18
+columns(Oaries)
+
+res_original = res
+resSig_original = resSig
+# Taking the resSig variable from the above deseq2 as it has all the genes with corresponding pvalue and log2fc values
+resSig$GeneID = rownames(resSig)
+resSigEntrez <- AnnotationDbi::select(Oaries, keys =  rownames(resSig),
+                                columns = c('ENTREZID','GENENAME'), keytype = 'SYMBOL') # Oaries is the annotation db created from the geneset_enrichment_analysis.R code
+# Now replace the NA values in entrezid column with the values from first column. 
+resSigEntrez$ENTREZID <- ifelse(is.na(resSigEntrez$ENTREZID), resSigEntrez$SYMBOL, resSigEntrez$ENTREZID)
+colnames(resSigEntrez) = c("GeneID", "ENTREZID")
+resSig_with_entrez = merge(as.data.frame(resSig), resSigEntrez, by = "GeneID") #All entrezIDs have been retrieved for the 36 genes with p<0.1 and lfc=0 threshold
+# Extract entrezIDs for the res variable
+res_allgenes<-res
+res_allgenes$GeneID<-rownames(res)
+# removing "LOC" info
+res_allgenes$GeneID <- stringr::str_remove(res_allgenes$GeneID, "LOC")
+rownames(res_allgenes) = stringr::str_remove(rownames(res_allgenes), "LOC")
+
+res_allgenesEntrez <- AnnotationDbi::select(Oaries, keys =  res_allgenes$GeneID,
+                                            columns = c('ENTREZID','GENENAME'), keytype = 'SYMBOL')
+# Now replace the NA values in entrezid column with the values from first column.
+res_allgenesEntrez$ENTREZID <- ifelse(is.na(res_allgenesEntrez$ENTREZID), res_allgenesEntrez$SYMBOL, res_allgenesEntrez$ENTREZID)
+colnames(res_allgenesEntrez) = c("GeneID", "ENTREZID")
+res_allgenes_with_entrez = merge(as.data.frame(res_allgenes), res_allgenesEntrez, by = "GeneID") #All entrezIDs have been retrieved for the DEGs
+dim(res_allgenes_with_entrez)
+#we want the log2 fold change 
+original_gene_list <- res_allgenes_with_entrez$log2FoldChange
+# name the vector
+names(original_gene_list) <- res_allgenes_with_entrez$ENTREZID
+# omit any NA values 
+gene_list<-na.omit(original_gene_list)
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+# Exctract significant results (padj < 0.05)
+sig_genes_df = subset(res_allgenes_with_entrez, padj < 0.05)
+# From significant results, we want to filter on log2fold change
+genes <- sig_genes_df$log2FoldChange
+# Name the vector
+names(genes) <- sig_genes_df$ENTREZID
+# omit NA values
+genes <- na.omit(genes)
+# filter on min log2fold change (log2FoldChange > 2)
+genes <- names(genes)[abs(genes) > 0.584]
+length(genes)
+go_enrich <- enrichGO(gene = genes,
+                      universe = names(gene_list),
+                      OrgDb = Oaries, 
+                      keyType = 'ENTREZID',
+                      readable = T,
+                      ont = "ALL",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.10)
+
+as.data.frame(go_enrich)
+Ora_go_df = file.path(out_dir, "Methane_filtering_1_ORA_GO_enrichments.csv")
+write.csv(as.data.frame(go_enrich),Ora_go_df, row.names=T)
+
+# Extract significant results from df2
+kegg_sig_genes_df = subset(resSig_with_entrez, padj < 0.05)
+# From significant results, we want to filter on log2fold change
+kegg_genes <- kegg_sig_genes_df$log2FoldChange
+# Name the vector with the CONVERTED ID!
+names(kegg_genes) <- kegg_sig_genes_df$ENTREZID
+# omit NA values
+kegg_genes <- na.omit(kegg_genes)
+# filter on log2fold change (PARAMETER)
+kegg_genes <- names(kegg_genes)[abs(kegg_genes) > 0.584]
+Sys.setenv(R_LIBCURL_SSL_REVOKE_BEST_EFFORT=TRUE)
+kegg_organism = "oas"
+kk <- enrichKEGG(gene=kegg_genes, universe=names(gene_list),organism=kegg_organism, pvalueCutoff = 0.05)
+as.data.frame(kk)
+Ora_kegg_df = file.path(out_dir, "Methane_filtering_1_ORA_KEGG_enrichments.csv")
+write.csv(as.data.frame(kk),Ora_kegg_df, row.names=T)
+
+#From	To	Species	David Gene Name
+# 100913157	100913157	Ovis aries	integrin linked kinase(ILK)
+# 101121460	101121460	Ovis aries	acyl-CoA oxidase 2(ACOX2)
+# 101115115	101115115	Ovis aries	platelet glycoprotein 4(LOC101115115)
+
+```
+**Validate DEGs from DESEq2 using Linear Model**
+
+If any genes remain significant both in DESEq2 and LM, then those genes have strong assoiations with DMI.
+
+
+```{r validate_degs}
+vsd <- vst(deseq2Data, blind = FALSE)
+expr_data <- assay(vsd) # extract transformed expression
+
+# Run LM for each gene
+lm_results <- apply(expr_data, 1, function(gene_expr){
+  model <- lm(gene_expr~CH4production, data = metaData)
+  summary(model)$coefficients["CH4production", c("Estimate", "Pr(>|t|)")]
+  })
+
+lm_results <- as.data.frame(t(lm_results))
+colnames(lm_results) <- c("Estimate", "P.Value")
+# Adjust p-values for multiple testing
+lm_results$adj.P.Val <- p.adjust(lm_results$P.Value, method ="fdr")
+
+# compare LM with DESeq2
+merged_res <- merge(as.data.frame(resSig), lm_results, by ="row.names", all.x = TRUE)
+head(merged_res)
+dim(merged_res)
+```
+
+
+```{r gsea}
+# Store the res variable to another variable for temporary use
+res_original = res
+
+rownames(res) <- stringr::str_remove(rownames(res), "LOC") 
+
+# we want the log2 fold change 
+original_gene_list <- res$log2FoldChange
+# name the vector
+names(original_gene_list) <- rownames(res)
+# omit any NA values 
+gene_list<-na.omit(original_gene_list)
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+gse <- gseGO(geneList=gene_list, 
+             ont ="ALL", 
+             keyType = "ENTREZID",
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = Oaries, 
+             pAdjustMethod = "BH")
+
+as.data.frame(gse)
+
+gse_df = file.path(out_dir, "Methane_GSEA_GO_enrichments.csv")
+write.csv(as.data.frame(gse),gse_df, row.names=T)
+
+# Most positive gene sets with highest NES
+as.data.frame(gse) %>%
+  # This returns the 3 rows with the largest NES values
+  dplyr::slice_max(NES, n = 3)
+
+# KEGG enrichment
+
+set.seed(123)
+kk2 <- gseKEGG(geneList     = gene_list,
+               organism     = "oas",
+               pvalueCutoff = 0.05,
+               pAdjustMethod = "BH")
+
+as.data.frame(kk2)
+
+gse_kegg_df = file.path(out_dir, "Methane_GSEA_KEGG_enrichments.csv")
+write.csv(as.data.frame(kk2),gse_kegg_df, row.names=T)
+
+# Most positive gene sets with highest NES
+as.data.frame(kk2) %>%
+  # This returns the 3 rows with the largest NES values
+  dplyr::slice_max(NES, n = 3)
+
+# Most negative NES
+as.data.frame(kk2) %>%
+  # Return the 3 rows with the smallest (most negative) NES values
+  dplyr::slice_min(NES, n = 3)
+```
+
+
+
+```{r exp_dist_of_9_gene_Th17}
+# extract the 9 genes enriched in Th17 cell diff pathway
+# th17 <- as.data.frame(c("AHR", "IL21R", "GATA3", "JAK3", "CD4", "RUNX1", "NFATC2", "IL27RA", "CD3D"))
+# colnames(th17) <- "Gene"
+# rownames(th17) <- th17$Gene
+# # extract normalized counts for the significant genes
+# th17_counts <- norma[rownames(norma) %in% rownames(th17), ]
+# log_counts_th17 <- log2(th17_counts + 1)
+# pheat_th17 <- pheatmap(log_counts_th17,
+#          cluster_rows = TRUE,
+#          cluster_cols = TRUE,
+#          show_rownames = TRUE,
+#          fontsize_raw = 0.3,
+#          main = "Heatmap of 9 differentially expressed genes enriched in Th17 cell differentiation pathway associated with DMI")
+# print(pheat_th17)
+# 
+# library(ggpubr)
+# df_long <- melt(as.data.frame(th17_counts), variable.name = "LambID", value.name ="expression")
+# df_long$gene <- rep(rownames(th17_counts), times = ncol(th17_counts))
+# # merge exp data with phenotype
+# df_merged <- merge(df_long, metaData, by = "LambID")
+# 
+# # extract unique genes, so as to stop plotting multiple plots per gene since we have many rows per gene  in df_merged.
+# unique_genes <- unique(df_merged$gene)
+# 
+# for (i in unique_genes) {
+#   gene_data <- subset(df_merged, gene == i)
+#   
+#   p<-ggscatter(gene_data, x = "DMI", y = "expression", add = "reg.line", conf.int = TRUE, 
+#           cor.coef = TRUE, cor.method = "spearman") +
+#     labs(title = paste("Scatter Plot for", i),
+#          x = "DMI",
+#          y = "Normalized Gene Expression counts")+
+#     theme_minimal()
+#   print(p)
+#   # Save plot
+#   #ggsave(filename = file.path(out_dir, paste0(i, "_scatterplot_Th17_cell_genes.png")), plot = p, width = 6, height = 4)
+# }
 
 ```
