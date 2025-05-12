@@ -52,3 +52,8 @@ After you have installed the necessary software, please proceed to running the a
 3. Rscript V1.0_GO_KEGG_enrichment_analysis.R
 4. Rscript V1.0_wgcna.R
 5. Rscript V1.0_Stringdb.R
+
+The entire pipeline is depicted in the form of a flowchart below.
+
+
+![RNASeq_Pipeline](https://github.com/user-attachments/assets/a737a005-3d6f-45a6-b6c5-8a369cbcb01d)
